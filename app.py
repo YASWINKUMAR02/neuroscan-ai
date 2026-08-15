@@ -19,25 +19,26 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ── CSS (ProHealth Premium UI Theme) ──────────────────────────────────────────
+# ── CSS (DICOM Clinical Workstation Theme) ─────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-/* Main Overrides */
+/* ── Base resets ── */
 html, body, [class*="css"] {
     font-family: 'Inter', 'Outfit', sans-serif;
-    color: #1A253C;
+    color: #E6EDF3;
 }
-
 .stApp {
-    background-color: #F4F6F9 !important;
+    background-color: #0D1117 !important;
 }
 
-/* Eliminate Streamlit Header Spacing & Layout Padding */
-[data-testid="stHeader"] {
-    display: none !important;
-}
+/* ── Hide Streamlit chrome ── */
+[data-testid="stHeader"] { display: none !important; }
+header { visibility: hidden; }
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 0.5rem !important;
@@ -45,180 +46,203 @@ html, body, [class*="css"] {
     padding-right: 2rem !important;
 }
 
-/* Hide Default Streamlit Widgets */
-header {visibility: hidden;}
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-
-/* Custom Top Bar */
+/* ── Top Bar ── */
 .top-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.4rem 0;
-    margin-bottom: 0.75rem;
-    border-bottom: 1px solid #E5E9F0;
+    padding: 0.5rem 0;
+    margin-bottom: 0.85rem;
+    border-bottom: 1px solid #21262D;
 }
 .logo-container {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.5rem;
     font-family: 'Outfit', sans-serif;
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: 700;
-    color: #0066FF;
+    color: #00D4FF;
+    letter-spacing: 0.02em;
+}
+.top-bar-right {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: #8B949E;
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+.status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #3FB950;
+    margin-right: 5px;
+    animation: pulse-green 2s infinite;
+}
+@keyframes pulse-green {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
 }
 
-/* Styling Streamlit Containers as Cards */
+/* ── Cards ── */
 div[data-testid="stVerticalBlockBorderWrapper"] {
-    background-color: #FFFFFF !important;
-    border: 1px solid #EAF0F6 !important;
-    border-radius: 16px !important;
-    padding: 0.85rem !important;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.01) !important;
-    margin-bottom: 0.75rem !important;
-}
-
-/* Card Titles */
-.pro-card-title {
-    font-family: 'Outfit', sans-serif;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #1A253C;
-    margin-bottom: 0.5rem;
-}
-
-/* File Uploader styling */
-div[data-testid="stFileUploader"] {
-    background-color: #F8FAFC !important;
-    border: 1px dashed #DDE3EA !important;
+    background-color: #161B22 !important;
+    border: 1px solid #21262D !important;
     border-radius: 10px !important;
+    padding: 0.85rem !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4) !important;
+    margin-bottom: 0.6rem !important;
+}
+
+/* ── Card titles ── */
+.pro-card-title {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #8B949E;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.6rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid #21262D;
+}
+
+/* ── File uploader ── */
+div[data-testid="stFileUploader"] {
+    background-color: #0D1117 !important;
+    border: 1px dashed #30363D !important;
+    border-radius: 8px !important;
     padding: 0.4rem !important;
 }
 
-/* Pipeline steps */
+/* ── Pipeline steps ── */
 .pipe-step-card {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.5rem 0.65rem;
-    border-radius: 10px;
-    margin-bottom: 0.4rem;
-    background-color: #F8FAFC;
-    border: 1px solid #EAF0F6;
+    gap: 0.65rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 7px;
+    margin-bottom: 0.35rem;
+    background-color: #0D1117;
+    border: 1px solid #21262D;
     transition: all 0.2s ease;
 }
 .pipe-step-card.active {
-    background-color: #F0F6FF;
-    border-color: #0066FF;
+    background-color: #0D1F33;
+    border-color: #00D4FF;
 }
 .pipe-step-card.done {
-    background-color: #F6FFF9;
-    border-color: #10B981;
+    background-color: #0D1F18;
+    border-color: #3FB950;
 }
 .pipe-step-badge {
-    width: 20px;
-    height: 20px;
+    width: 20px; height: 20px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: 0.7rem;
+    font-size: 0.68rem;
+    flex-shrink: 0;
 }
-.pipe-step-badge.active { background-color: #0066FF; color: #FFFFFF; }
-.pipe-step-badge.done { background-color: #10B981; color: #FFFFFF; }
-.pipe-step-badge.todo { background-color: #E2E8F0; color: #7C8BA1; }
-
+.pipe-step-badge.active { background-color: #00D4FF; color: #0D1117; }
+.pipe-step-badge.done   { background-color: #3FB950; color: #0D1117; }
+.pipe-step-badge.todo   { background-color: #21262D; color: #8B949E; }
 .pipe-step-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #1A253C;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #E6EDF3;
 }
 
-/* Circular Metric Indicator */
+/* ── Confidence ring ── */
 .circle-progress-container {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.75rem;
 }
 .circle-progress {
     position: relative;
-    width: 56px;
-    height: 56px;
+    width: 58px; height: 58px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: #21262D;
 }
 .circle-val {
     position: relative;
     z-index: 10;
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     font-weight: 700;
-    color: #1A253C;
+    color: #E6EDF3;
     font-family: 'JetBrains Mono', monospace;
 }
 
-/* Custom horizontal progress bars */
+/* ── Progress bars ── */
 .bar-wrap {
     width: 100%;
-    background-color: #F1F5F9;
-    height: 6px;
+    background-color: #21262D;
+    height: 5px;
     border-radius: 99px;
     overflow: hidden;
-    margin-top: 0.25rem;
+    margin-top: 0.2rem;
 }
 .bar-fill {
     height: 100%;
     border-radius: 99px;
 }
 
-/* Viewport Image Reticle Container */
-.viewport-frame {
-    background-color: #FFFFFF;
-    border-radius: 12px;
-    overflow: hidden;
-}
-
+/* ── Viewport labels ── */
 .viewport-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    color: #7C8BA1;
-    margin-top: 0.5rem;
+    font-size: 0.68rem;
+    color: #8B949E;
+    margin-top: 0.4rem;
     display: flex;
     justify-content: space-between;
 }
 
-/* Metric overrides */
+/* ── st.metric overrides ── */
 [data-testid="stMetricValue"] {
     font-family: 'JetBrains Mono', monospace !important;
-    font-size: 1.4rem !important;
+    font-size: 1.3rem !important;
     font-weight: 700 !important;
-    color: #1A253C !important;
+    color: #E6EDF3 !important;
 }
 [data-testid="stMetricLabel"] {
     text-transform: uppercase !important;
-    font-size: 0.65rem !important;
-    letter-spacing: 0.05em !important;
-    color: #7C8BA1 !important;
+    font-size: 0.62rem !important;
+    letter-spacing: 0.06em !important;
+    color: #8B949E !important;
 }
 
+/* ── Misc ── */
 .eyebrow {
-    font-size: 11px;
+    font-size: 0.68rem;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #7C8BA1;
+    letter-spacing: 0.07em;
+    color: #8B949E;
     margin-bottom: 0.4rem;
 }
-
 .disclaimer-text {
-    font-size: 0.72rem;
-    color: #7C8BA1;
-    margin-top: 1.5rem;
-    line-height: 1.4;
+    font-size: 0.68rem;
+    color: #484F58;
+    margin-top: 1rem;
+    line-height: 1.5;
     text-align: center;
+    border-top: 1px solid #21262D;
+    padding-top: 0.6rem;
+}
+
+/* ── st.info / st.error ── */
+[data-testid="stAlert"] {
+    background-color: #161B22 !important;
+    border-color: #21262D !important;
+    border-radius: 8px !important;
+    color: #8B949E !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -442,11 +466,16 @@ with st.spinner("Initializing models..."):
     metrics = load_metrics()
     seg_metrics = load_seg_metrics()
 
-# ── Top Bar Header ────────────────────────────────────────────────────────────
+# ── Top Bar Header ───────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="top-bar">
     <div class="logo-container">
-        <span>🌐</span> ProHealth TumorOI OS
+        🧠&nbsp; NeuroScan AI
+    </div>
+    <div class="top-bar-right">
+        <span><span class="status-dot"></span>Models Online</span>
+        <span>EfficientNet-B0 &nbsp;·&nbsp; U-Net</span>
+        <span style="color:#30363D;">v2.0</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -470,11 +499,9 @@ gradcam_raw = None
 
 # LEFT COLUMN: Pipeline & File Upload
 with col_left:
-    st.markdown("<h2 style='font-family: Outfit, sans-serif; font-weight: 700; color: #1A253C; margin-bottom: 0.2rem; font-size: 1.6rem;'>Overview</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #7C8BA1; font-size: 0.9rem; margin-bottom: 1.5rem;'>Patient Health Scan</p>", unsafe_allow_html=True)
-    
+    st.markdown("<p style='font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; color:#8B949E; margin-bottom:0.75rem;'>Patient &amp; Workflow</p>", unsafe_allow_html=True)
     with st.container(border=True):
-        st.markdown("<div class='pro-card-title'>Upload Diagnostics</div>", unsafe_allow_html=True)
+        st.markdown("<div class='pro-card-title'>Upload MRI Scan</div>", unsafe_allow_html=True)
         uploaded = st.file_uploader("Upload MRI", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
 
 # Automatic Pipeline Execution
@@ -526,10 +553,9 @@ with col_left:
     if uploaded and not is_mri and mri_reason != "":
         st.error(f"Image Rejected: {mri_reason}")
 
-# CENTER COLUMN: Viewport Grid (Original, Overlay, Heatmap shown together)
+# CENTER COLUMN: Viewport Grid
 with col_center:
-    st.markdown("<h2 style='font-family: Outfit, sans-serif; font-weight: 700; color: #1A253C; margin-bottom: 0.2rem; font-size: 1.6rem;'>AI Viewport</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #7C8BA1; font-size: 0.9rem; margin-bottom: 1.5rem;'>Pathology Visualizations</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; color:#8B949E; margin-bottom:0.75rem;'>AI Imaging Viewport</p>", unsafe_allow_html=True)
 
     if pil_img:
         if is_mri:
@@ -545,39 +571,131 @@ with col_center:
                         st.markdown("<div class='pro-card-title'>Pathology Overlay</div>", unsafe_allow_html=True)
                         overlay_img = overlay_mask_on_image(pil_img, binary_mask, alpha=0.45)
                         st.image(overlay_img, use_container_width=True)
-
-                # Second Row: Segmentation heatmap + Grad-CAM
-                st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
-                view_c3, view_c4 = st.columns(2, gap="medium")
-                with view_c3:
-                    with st.container(border=True):
-                        st.markdown("<div class='pro-card-title'>Segmentation Heatmap</div>", unsafe_allow_html=True)
-                        prob_norm = (prob_map * 255).astype(np.uint8)
-                        heatmap = cv2.applyColorMap(prob_norm, cv2.COLORMAP_JET)
-                        heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-                        st.image(heatmap_rgb, use_container_width=True)
-                with view_c4:
-                    with st.container(border=True):
-                        st.markdown("<div class='pro-card-title'>Grad-CAM <span style='font-size:0.7rem;color:#7C8BA1;font-weight:400;'>(XAI · Classifier Attention)</span></div>", unsafe_allow_html=True)
-                        if gradcam_img:
-                            st.image(gradcam_img, use_container_width=True)
-                        else:
-                            st.caption("Grad-CAM unavailable.")
             else:
-                # Normal scan with no tumor: show original + Grad-CAM
-                view_n1, view_n2 = st.columns(2, gap="medium")
-                with view_n1:
-                    with st.container(border=True):
-                        st.markdown("<div class='pro-card-title'>Original MRI Scan</div>", unsafe_allow_html=True)
-                        st.image(pil_img, use_container_width=True)
-                with view_n2:
-                    with st.container(border=True):
-                        st.markdown("<div class='pro-card-title'>Grad-CAM <span style='font-size:0.7rem;color:#7C8BA1;font-weight:400;'>(XAI · Classifier Attention)</span></div>", unsafe_allow_html=True)
-                        if gradcam_img:
-                            st.image(gradcam_img, use_container_width=True)
-                        else:
-                            st.caption("Grad-CAM unavailable.")
+                # Healthy scan: show original MRI only
+                with st.container(border=True):
+                    st.markdown("<div class='pro-card-title'>Original MRI Scan</div>", unsafe_allow_html=True)
+                    st.image(pil_img, use_container_width=True)
                 st.info("No pathology detected. Segmentation skipped.")
+
+            # ── Diagnosis findings card (full width below images) ───────────────
+            st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>Diagnosis</div>", unsafe_allow_html=True)
+                
+                class_info_map = {
+                    "glioma": ("Glioma Findings", "#00D4FF", "#FF3B30", "Malignant", "#2A1818"),
+                    "meningioma": ("Meningioma Findings", "#00D4FF", "#FF9500", "Typically Benign", "#2A2118"),
+                    "pituitary": ("Pituitary Findings", "#00D4FF", "#5AC8FA", "Typically Benign", "#18222A"),
+                    "notumor": ("No Tumor Detected", "#00D4FF", "#34C759", "Healthy", "#182A1A")
+                }
+                lbl, theme_color, stroke_color, status_lbl, status_bg = class_info_map[predicted_class]
+                conf = probs[CLASSES.index(predicted_class)] * 100
+
+                # Render circular progress indicator
+                st.markdown(f"""
+                <div class="circle-progress-container">
+                    <div>
+                        <h3 style="font-family: 'Outfit', sans-serif; font-weight: 700; color: #E6EDF3; margin: 0; font-size: 1.3rem;">{lbl}</h3>
+                        <div style="display: inline-block; background-color: {status_bg}; color: {stroke_color}; font-size: 0.72rem; font-weight: 700; padding: 2px 10px; border-radius: 99px; margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid {stroke_color}44;">{status_lbl}</div>
+                        <p style="color: #8B949E; font-size: 0.8rem; margin: 0; margin-top: 0.4rem;">Classification Confidence</p>
+                    </div>
+                    <div class="circle-progress" style="background: conic-gradient({stroke_color} calc({conf} * 1%), #21262D 0);">
+                        <div class="circle-val">{conf:.0f}%</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Probabilities block
+                st.markdown("<p style='font-size: 0.82rem; font-weight: 600; color: #E6EDF3; margin-top: 1.2rem; margin-bottom: 0.5rem;'>Other Class Distribution</p>", unsafe_allow_html=True)
+                for c, p in sorted(zip(CLASSES, probs), key=lambda x: -x[1]):
+                    if c == predicted_class: continue
+                    p_pct = p * 100
+                    c_lbl = class_info_map[c][0].replace(" Findings", "").replace(" Detected", "")
+                    bar_color = class_info_map[c][2]
+                    status_lbl_other = class_info_map[c][3]
+                    st.markdown(f"""
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; margin-bottom: 0.25rem;">
+                        <span style="color: #8B949E;">{c_lbl} ({status_lbl_other})</span>
+                        <span style="font-family:'JetBrains Mono',monospace; font-weight: 600; color: #E6EDF3;">{p_pct:.1f}%</span>
+                    </div>
+                    <div class="bar-wrap" style="height: 5px; margin-bottom: 0.75rem;">
+                        <div class="bar-fill" style="width: {p_pct}%; background-color: {bar_color};"></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # ── Tumor Area Calculation Card ────────────────────────────────────────
+            st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>🔬 Tumor Area</div>", unsafe_allow_html=True)
+                if has_tumor and binary_mask is not None:
+                    px_count, total_px, cov_pct, area_mm2, area_cm2 = compute_tumor_area(binary_mask, pil_img)
+                    c1, c2 = st.columns(2)
+                    c1.metric("Area (mm²)",    f"{area_mm2:,.1f}")
+                    c2.metric("Area (cm²)",    f"{area_cm2:.2f}")
+                    c1.metric("Tumor Pixels",  f"{px_count:,}")
+                    c2.metric("Coverage",      f"{cov_pct:.2f}%")
+                    st.markdown("""
+                    <div style="font-size:0.72rem; color:#8B949E; margin-top:0.4rem;">
+                        ℹ️ Estimated at 0.5 mm/pixel (standard MRI resolution)
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div style='color:#8B949E; font-size:0.82rem; text-align:center; padding:0.75rem 0;'>No tumor detected — area analysis unavailable.</div>", unsafe_allow_html=True)
+
+            # ── Tumor Shape Analysis Card ──────────────────────────────────────────
+            st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>📐 Shape Analysis</div>", unsafe_allow_html=True)
+                if has_tumor and binary_mask is not None:
+                    shape = compute_shape_analysis(binary_mask)
+                    if shape:
+                        s_lbl  = shape["shape_label"]
+                        s_col  = shape["shape_color"]
+                        circ   = shape["circularity"]
+                        comp   = shape["compactness"]
+                        sol    = shape["solidity"]
+
+                        st.markdown(f"""
+                        <div style="margin-bottom:1rem;">
+                            <p style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
+                                      color:#8B949E; margin:0 0 0.3rem 0;">Tumor Shape</p>
+                            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                                <div style="width:10px; height:10px; border-radius:50%;
+                                            background:{s_col};"></div>
+                                <span style="font-family:'Outfit',sans-serif; font-size:1.4rem;
+                                             font-weight:700; color:{s_col};">{s_lbl}</span>
+                            </div>
+                        </div>
+                        <p style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
+                                   color:#8B949E; margin:0 0 0.6rem 0;">Features</p>
+                        """, unsafe_allow_html=True)
+
+                        def _feat_row(label, value, bar_pct, color):
+                            st.markdown(f"""
+                            <div style="margin-bottom:0.65rem;">
+                                <div style="display:flex; justify-content:space-between;
+                                            align-items:center; margin-bottom:0.2rem;">
+                                    <span style="font-size:0.82rem; color:#E6EDF3; font-weight:500;">{label}</span>
+                                    <span style="font-family:'JetBrains Mono',monospace; font-size:0.82rem;
+                                                 font-weight:700; color:#E6EDF3;">{value:.3f}</span>
+                                </div>
+                                <div class="bar-wrap">
+                                    <div class="bar-fill" style="width:{min(bar_pct,100):.1f}%;
+                                         background:{color};"></div>
+                                </div>
+                            </div>""", unsafe_allow_html=True)
+
+                        circ_col = "#34C759" if circ >= 0.60 else "#FF3B30"
+                        comp_col = "#34C759" if comp >= 0.60 else "#FF3B30"
+                        sol_col  = "#34C759" if sol  >= 0.90 else ("#FF9500" if sol >= 0.75 else "#FF3B30")
+
+                        _feat_row("Circularity",  circ, circ * 100, circ_col)
+                        _feat_row("Compactness",  comp, comp * 100, comp_col)
+                        _feat_row("Solidity",     sol,  sol  * 100, sol_col)
+                    else:
+                        st.markdown("<div style='color:#8B949E;font-size:0.82rem;'>No contour found in mask.</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div style='color:#8B949E; font-size:0.82rem; text-align:center; padding:0.75rem 0;'>No tumor detected — shape analysis unavailable.</div>", unsafe_allow_html=True)
 
             w, h = pil_img.size
             st.markdown(f"""
@@ -590,101 +708,55 @@ with col_center:
             st.warning(f"MRI guardrail failed: {mri_reason}")
     else:
         st.markdown("""
-        <div style="background-color: #FFFFFF; border: 1px solid #EAF0F6; border-radius: 24px; padding: 6rem 2rem; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.02); height: 100%;">
-            <span style="font-size: 4rem;">📂</span>
-            <h4 style="font-family: 'Outfit', sans-serif; font-weight: 600; color: #1A253C; margin-top: 1rem;">Diagnostics Queue Empty</h4>
-            <p style="color: #7C8BA1; font-size: 0.9rem;">Upload a brain MRI scan from the left panel to trigger the model pipeline.</p>
+        <div style="background-color:#161B22; border:1px solid #21262D; border-radius:12px;
+                    padding:6rem 2rem; text-align:center; height:100%;">
+            <span style="font-size:3rem;">📂</span>
+            <h4 style="font-family:'Outfit',sans-serif; font-weight:600; color:#E6EDF3;
+                       margin-top:1rem;">Diagnostics Queue Empty</h4>
+            <p style="color:#8B949E; font-size:0.88rem;">Upload a brain MRI scan from the left panel to begin analysis.</p>
         </div>
         """, unsafe_allow_html=True)
 
 # RIGHT COLUMN: Readouts & Results
 with col_right:
-    st.markdown("<h2 style='font-family: Outfit, sans-serif; font-weight: 700; color: #1A253C; margin-bottom: 0.2rem; font-size: 1.6rem;'>Analysis</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #7C8BA1; font-size: 0.9rem; margin-bottom: 1.5rem;'>Diagnosis & Statistics</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; color:#8B949E; margin-bottom:0.75rem;'>Clinical Analysis</p>", unsafe_allow_html=True)
 
     if step >= 2 and probs is not None:
-        # ── XAI Explainability Card ───────────────────────────────────────────
+        # ── XAI Grad-CAM Card (top) ──────────────────────────────────────────
         with st.container(border=True):
             st.markdown("<div class='pro-card-title'>🔍 XAI · Grad-CAM</div>", unsafe_allow_html=True)
             if gradcam_img:
                 st.image(gradcam_img, use_container_width=True)
-                # Top activated region as text interpretation
                 if gradcam_raw is not None:
                     cam_gray = np.array(gradcam_raw.convert("L")).astype(np.float32) / 255.0
                     h, w = cam_gray.shape
                     cy, cx = np.unravel_index(cam_gray.argmax(), cam_gray.shape)
-                    # Quadrant label
                     vq = "Upper" if cy < h // 2 else "Lower"
                     hq = "Left"  if cx < w // 2 else "Right"
                     focus_pct = float(cam_gray[cam_gray >= 0.7].size / cam_gray.size * 100)
                     st.markdown(f"""
                     <div style="margin-top:0.5rem;">
                         <p style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
-                                  color:#7C8BA1; margin:0 0 0.3rem 0;">Classifier Focus Region</p>
+                                  color:#8B949E; margin:0 0 0.3rem 0;">Classifier Focus Region</p>
                         <p style="font-family:'Outfit',sans-serif; font-size:0.95rem; font-weight:700;
-                                  color:#1A253C; margin:0;">{vq}-{hq} Region</p>
-                        <p style="font-size:0.78rem; color:#7C8BA1; margin:0.25rem 0 0.6rem 0;">
+                                  color:#E6EDF3; margin:0;">{vq}-{hq} Region</p>
+                        <p style="font-size:0.78rem; color:#8B949E; margin:0.25rem 0 0.6rem 0;">
                             Peak activation at ({cx}px, {cy}px)
                         </p>
                         <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:0.2rem;">
-                            <span style="color:#7C8BA1;">High-attention area (≥70%)</span>
-                            <span style="font-weight:700; color:#0066FF;">{focus_pct:.1f}%</span>
+                            <span style="color:#8B949E;">High-attention area (≥70%)</span>
+                            <span style="font-weight:700; color:#00D4FF;">{focus_pct:.1f}%</span>
                         </div>
                         <div class="bar-wrap">
-                            <div class="bar-fill" style="width:{min(focus_pct,100):.1f}%; background:#0066FF;"></div>
+                            <div class="bar-fill" style="width:{min(focus_pct,100):.1f}%; background:#00D4FF;"></div>
                         </div>
-                        <p style="font-size:0.70rem; color:#7C8BA1; margin-top:0.5rem; line-height:1.4;">
+                        <p style="font-size:0.70rem; color:#8B949E; margin-top:0.5rem; line-height:1.4;">
                             Red/yellow regions indicate areas the classifier weighted most heavily
-                            when predicting <strong>{predicted_class.capitalize()}</strong>.
+                            when predicting <strong style="color:#E6EDF3;">{predicted_class.capitalize()}</strong>.
                         </p>
                     </div>""", unsafe_allow_html=True)
             else:
-                st.markdown("<div style='color:#7C8BA1;font-size:0.82rem;text-align:center;padding:0.75rem 0;'>Grad-CAM unavailable for this scan.</div>", unsafe_allow_html=True)
-
-        # Findings Card
-        with st.container(border=True):
-            st.markdown("<div class='pro-card-title'>Diagnosis</div>", unsafe_allow_html=True)
-            
-            class_info_map = {
-                "glioma": ("Glioma Findings", "#0066FF", "#FF3B30", "Malignant", "#FFEBEA"),
-                "meningioma": ("Meningioma Findings", "#0066FF", "#FF9500", "Typically Benign", "#FFF3E0"),
-                "pituitary": ("Pituitary Findings", "#0066FF", "#5AC8FA", "Typically Benign", "#E5F6FD"),
-                "notumor": ("No Tumor Detected", "#0066FF", "#34C759", "Healthy", "#E8F5E9")
-            }
-            lbl, theme_color, stroke_color, status_lbl, status_bg = class_info_map[predicted_class]
-            conf = probs[CLASSES.index(predicted_class)] * 100
-
-            # Render circular progress indicator at top right of findings
-            st.markdown(f"""
-            <div class="circle-progress-container">
-                <div>
-                    <h3 style="font-family: 'Outfit', sans-serif; font-weight: 700; color: #1A253C; margin: 0; font-size: 1.3rem;">{lbl}</h3>
-                    <div style="display: inline-block; background-color: {status_bg}; color: {stroke_color}; font-size: 0.72rem; font-weight: 700; padding: 2px 10px; border-radius: 99px; margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em;">{status_lbl}</div>
-                    <p style="color: #7C8BA1; font-size: 0.8rem; margin: 0; margin-top: 0.4rem;">Classification Confidence</p>
-                </div>
-                <div class="circle-progress" style="background: conic-gradient({stroke_color} calc({conf} * 1%), #F1F5F9 0);">
-                    <div class="circle-val">{conf:.0f}%</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Probabilities block
-            st.markdown("<p style='font-size: 0.85rem; font-weight: 600; color: #1A253C; margin-top: 1rem; margin-bottom: 0.5rem;'>Other Class Distribution</p>", unsafe_allow_html=True)
-            for c, p in sorted(zip(CLASSES, probs), key=lambda x: -x[1]):
-                if c == predicted_class: continue
-                p_pct = p * 100
-                c_lbl = class_info_map[c][0].replace(" Findings", "").replace(" Detected", "")
-                bar_color = class_info_map[c][2]
-                status_lbl_other = class_info_map[c][3]
-                st.markdown(f"""
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; margin-bottom: 0.25rem;">
-                    <span style="color: #7C8BA1;">{c_lbl} ({status_lbl_other})</span>
-                    <span class="mono-stat" style="font-weight: 600; color: #1A253C;">{p_pct:.1f}%</span>
-                </div>
-                <div class="bar-wrap" style="height: 5px; margin-bottom: 0.75rem;">
-                    <div class="bar-fill" style="width: {p_pct}%; background-color: {bar_color};"></div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown("<div style='color:#8B949E;font-size:0.82rem;text-align:center;padding:0.75rem 0;'>Grad-CAM unavailable for this scan.</div>", unsafe_allow_html=True)
 
         # ── Segmentation Model Metrics Card ───────────────────────────────────
         with st.container(border=True):
@@ -706,79 +778,6 @@ with col_right:
                 c1.metric("Tumor Coverage",  "--")
                 c2.metric("Active Pixels",   "--")
 
-        # ── Tumor Area Calculation Card ────────────────────────────────────────
-        with st.container(border=True):
-            st.markdown("<div class='pro-card-title'>🔬 Tumor Area</div>", unsafe_allow_html=True)
-            if has_tumor and binary_mask is not None:
-                px_count, total_px, cov_pct, area_mm2, area_cm2 = compute_tumor_area(binary_mask, pil_img)
-                c1, c2 = st.columns(2)
-                c1.metric("Area (mm²)",    f"{area_mm2:,.1f}")
-                c2.metric("Area (cm²)",    f"{area_cm2:.2f}")
-                c1.metric("Tumor Pixels",  f"{px_count:,}")
-                c2.metric("Coverage",      f"{cov_pct:.2f}%")
-                st.markdown(f"""
-                <div style="font-size:0.72rem; color:#7C8BA1; margin-top:0.4rem;">
-                    ℹ️ Estimated at 0.5 mm/pixel (standard MRI resolution)
-                </div>""", unsafe_allow_html=True)
-            else:
-                st.markdown("<div style='color:#7C8BA1; font-size:0.82rem; text-align:center; padding:0.75rem 0;'>No tumor detected — area analysis unavailable.</div>", unsafe_allow_html=True)
-
-        # ── Tumor Shape Analysis Card ──────────────────────────────────────────
-        with st.container(border=True):
-            st.markdown("<div class='pro-card-title'>📐 Shape Analysis</div>", unsafe_allow_html=True)
-            if has_tumor and binary_mask is not None:
-                shape = compute_shape_analysis(binary_mask)
-                if shape:
-                    s_lbl  = shape["shape_label"]
-                    s_col  = shape["shape_color"]
-                    circ   = shape["circularity"]
-                    comp   = shape["compactness"]
-                    sol    = shape["solidity"]
-
-                    # ── Prominent shape type header ──────────────────────────
-                    st.markdown(f"""
-                    <div style="margin-bottom:1rem;">
-                        <p style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
-                                  color:#7C8BA1; margin:0 0 0.3rem 0;">Tumor Shape</p>
-                        <div style="display:inline-flex; align-items:center; gap:0.5rem;">
-                            <div style="width:10px; height:10px; border-radius:50%;
-                                        background:{s_col};"></div>
-                            <span style="font-family:'Outfit',sans-serif; font-size:1.4rem;
-                                         font-weight:700; color:{s_col};">{s_lbl}</span>
-                        </div>
-                    </div>
-                    <p style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
-                               color:#7C8BA1; margin:0 0 0.6rem 0;">Features</p>
-                    """, unsafe_allow_html=True)
-
-                    # ── Feature rows with bar ────────────────────────────────
-                    def _feat_row(label, value, bar_pct, color):
-                        st.markdown(f"""
-                        <div style="margin-bottom:0.65rem;">
-                            <div style="display:flex; justify-content:space-between;
-                                        align-items:center; margin-bottom:0.2rem;">
-                                <span style="font-size:0.82rem; color:#1A253C; font-weight:500;">{label}</span>
-                                <span style="font-family:'JetBrains Mono',monospace; font-size:0.82rem;
-                                             font-weight:700; color:#1A253C;">{value:.3f}</span>
-                            </div>
-                            <div class="bar-wrap">
-                                <div class="bar-fill" style="width:{min(bar_pct,100):.1f}%;
-                                     background:{color};"></div>
-                            </div>
-                        </div>""", unsafe_allow_html=True)
-
-                    circ_col = "#34C759" if circ >= 0.60 else "#FF3B30"
-                    comp_col = "#34C759" if comp >= 0.60 else "#FF3B30"
-                    sol_col  = "#34C759" if sol  >= 0.90 else ("#FF9500" if sol  >= 0.75 else "#FF3B30")
-
-                    _feat_row("Circularity",  circ, circ * 100, circ_col)
-                    _feat_row("Compactness",  comp, comp * 100, comp_col)
-                    _feat_row("Solidity",     sol,  sol  * 100, sol_col)
-                else:
-                    st.markdown("<div style='color:#7C8BA1;font-size:0.82rem;'>No contour found in mask.</div>", unsafe_allow_html=True)
-            else:
-                st.markdown("<div style='color:#7C8BA1; font-size:0.82rem; text-align:center; padding:0.75rem 0;'>No tumor detected — shape analysis unavailable.</div>", unsafe_allow_html=True)
-
         # ── Segmentation Confidence Map Card ──────────────────────────────────
         with st.container(border=True):
             st.markdown("<div class='pro-card-title'>📊 Confidence Map</div>", unsafe_allow_html=True)
@@ -787,10 +786,8 @@ with col_right:
                 if conf:
                     mean_pct = conf["mean"] * 100
                     max_pct  = conf["max"]  * 100
-                    std_pct  = conf["std"]  * 100
                     hc       = conf["high_conf_pct"]
 
-                    # Overall confidence level label
                     if mean_pct >= 80:   conf_lbl, conf_col = "High",     "#34C759"
                     elif mean_pct >= 55: conf_lbl, conf_col = "Moderate", "#FF9500"
                     else:                conf_lbl, conf_col = "Low",       "#FF3B30"
@@ -798,7 +795,7 @@ with col_right:
                     st.markdown(f"""
                     <div style="margin-bottom:1rem;">
                         <p style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
-                                  color:#7C8BA1; margin:0 0 0.3rem 0;">Confidence Level</p>
+                                  color:#8B949E; margin:0 0 0.3rem 0;">Confidence Level</p>
                         <div style="display:inline-flex; align-items:center; gap:0.5rem;">
                             <div style="width:10px; height:10px; border-radius:50%;
                                         background:{conf_col};"></div>
@@ -807,7 +804,7 @@ with col_right:
                         </div>
                     </div>
                     <p style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
-                               color:#7C8BA1; margin:0 0 0.6rem 0;">Features</p>
+                               color:#8B949E; margin:0 0 0.6rem 0;">Features</p>
                     """, unsafe_allow_html=True)
 
                     def _conf_row(label, value_str, bar_pct, color):
@@ -815,9 +812,9 @@ with col_right:
                         <div style="margin-bottom:0.65rem;">
                             <div style="display:flex; justify-content:space-between;
                                         align-items:center; margin-bottom:0.2rem;">
-                                <span style="font-size:0.82rem; color:#1A253C; font-weight:500;">{label}</span>
+                                <span style="font-size:0.82rem; color:#E6EDF3; font-weight:500;">{label}</span>
                                 <span style="font-family:'JetBrains Mono',monospace; font-size:0.82rem;
-                                             font-weight:700; color:#1A253C;">{value_str}</span>
+                                             font-weight:700; color:#E6EDF3;">{value_str}</span>
                             </div>
                             <div class="bar-wrap">
                                 <div class="bar-fill" style="width:{min(bar_pct,100):.1f}%;
@@ -829,18 +826,18 @@ with col_right:
                     peak_col = "#34C759" if max_pct  >= 90 else ("#FF9500" if max_pct  >= 70 else "#FF3B30")
                     hc_col   = "#34C759" if hc       >= 70 else ("#FF9500" if hc       >= 40 else "#FF3B30")
 
-                    _conf_row("Mean Confidence",       f"{mean_pct:.1f}%", mean_pct, mean_col)
-                    _conf_row("Peak Confidence",       f"{max_pct:.1f}%",  max_pct,  peak_col)
-                    _conf_row("High-conf Region (≥75%)", f"{hc:.1f}%",    hc,       hc_col)
+                    _conf_row("Mean Confidence",         f"{mean_pct:.1f}%", mean_pct, mean_col)
+                    _conf_row("Peak Confidence",         f"{max_pct:.1f}%",  max_pct,  peak_col)
+                    _conf_row("High-conf Region (≥75%)", f"{hc:.1f}%",       hc,       hc_col)
             else:
-                st.markdown("<div style='color:#7C8BA1; font-size:0.82rem; text-align:center; padding:0.75rem 0;'>No tumor detected — confidence map unavailable.</div>", unsafe_allow_html=True)
+                st.markdown("<div style='color:#8B949E; font-size:0.82rem; text-align:center; padding:0.75rem 0;'>No tumor detected — confidence map unavailable.</div>", unsafe_allow_html=True)
 
     else:
         with st.container(border=True):
-            st.markdown("<div style='color: #7C8BA1; font-size: 0.85rem; text-align: center; padding: 2rem 0;'>Awaiting scan input to run diagnosis...</div>", unsafe_allow_html=True)
+            st.markdown("<div style='color:#8B949E; font-size:0.85rem; text-align:center; padding:2rem 0;'>Awaiting scan input to run diagnosis...</div>", unsafe_allow_html=True)
 
     st.markdown("""
     <div class="disclaimer-text">
-        🔒 Research use only. Not for primary diagnosis. Patient data encrypted.
+        🔒 Research &amp; educational use only &nbsp;·&nbsp; Not for primary clinical diagnosis &nbsp;·&nbsp; Patient data processed locally
     </div>
     """, unsafe_allow_html=True)
