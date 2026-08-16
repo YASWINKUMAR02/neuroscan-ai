@@ -1414,11 +1414,14 @@ def render_login_page():
     border-radius: 8px;
     margin-bottom: 20px;
   }
-  div[data-testid="stRadio"] label {
+  div[data-testid="stRadio"] label,
+  div[data-testid="stRadio"] label p,
+  div[data-testid="stRadio"] div[role="radiogroup"] label,
+  div[data-testid="stRadio"] div[role="radiogroup"] label p {
     font-family: var(--sans) !important;
     font-size: 13.5px !important;
     font-weight: 500 !important;
-    color: var(--ink-soft) !important;
+    color: var(--ink) !important;
   }
 
   /* Button Overrides */
