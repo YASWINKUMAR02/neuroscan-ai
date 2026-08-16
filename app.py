@@ -20,6 +20,13 @@ st.set_page_config(
 )
 
 # ── Session State Init ────────────────────────────────────────────────────────
+# Handle query parameters for page navigation from custom HTML links
+if "nav" in st.query_params:
+    target_page = st.query_params["nav"]
+    if target_page in ["landing", "login", "dashboard"]:
+        st.session_state.page = target_page
+    st.query_params.clear()
+
 if "page" not in st.session_state:
     st.session_state.page = "landing"
 if "logged_in" not in st.session_state:
@@ -49,22 +56,32 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: 'Inter', 'Outfit', sans-serif;
     color: #E6EDF3;
+    background-color: #0D1117 !important; /* Ensure browser body background is dark to prevent light leakage */
+    overflow-x: hidden !important; /* Disable horizontal scrollbars globally */
 }
-.stApp {
+.stApp, [data-testid="stAppViewContainer"] {
     background-color: #0D1117 !important;
+    overflow-x: hidden !important; /* Prevent scrollbar track render */
 }
 
 /* ── Hide Streamlit chrome ── */
 [data-testid="stHeader"] { display: none !important; }
 header { visibility: hidden; }
 #MainMenu { visibility: hidden; }
-footer { visibility: hidden; }
+footer { display: none !important; }
+[data-testid="stDecoration"] { display: none !important; }
 
 .block-container {
-    padding-top: 0.5rem !important;
-    padding-bottom: 0.5rem !important;
-    padding-left: 2rem !important;
-    padding-right: 2rem !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+    max-width: 98% !important;
+}
+
+/* ── Streamlit Spacing Resets ── */
+[data-testid="stVerticalBlock"] {
+    gap: 0.45rem !important;
 }
 
 /* ── Top Bar ── */
@@ -838,141 +855,440 @@ def overlay_gradcam(pil_img: Image.Image, cam: np.ndarray, alpha: float = 0.5):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def render_landing_page():
-    """Full-width landing page with hero banner and service cards."""
+    """Full-width landing page with hero banner, service cards, and PACS/DICOM workstation aesthetics from the redesign preview."""
 
-    # ── Navigation Bar ────────────────────────────────────────────────────────
+    # Inject landing page CSS stylesheet (light theme, space-grotesk typography, full-width)
     st.markdown("""
-    <div class="landing-nav">
-        <div class="landing-logo">🧠&nbsp; NeuroScan AI</div>
-        <div class="landing-nav-links">
-            <span style="font-size:0.85rem; color:#8B949E;">Brain Tumor Analysis Platform</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-    # ── Hero Section ──────────────────────────────────────────────────────────
+  :root {
+    --bg: #F5F7F8;
+    --panel: #FFFFFF;
+    --border: #E1E7EA;
+    --ink: #10171C;
+    --ink-soft: #4B5960;
+    --ink-faint: #7C8A91;
+    --teal: #0E6B66;
+    --teal-deep: #0A4F4C;
+    --blue: #2C4D74;
+    --coral: #C1543F;
+    --sage: #4C7A5E;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Inter', sans-serif;
+    --display: 'Space Grotesk', sans-serif;
+  }
+
+  /* Reset layout constraints for landing page to go full-width */
+  .block-container {
+    padding-top: 0px !important;
+    padding-bottom: 0px !important;
+    padding-left: 0px !important;
+    padding-right: 0px !important;
+    max-width: 100% !important;
+  }
+  [data-testid="stVerticalBlock"] {
+    gap: 0px !important;
+  }
+
+  html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"], .main {
+    background-color: var(--bg) !important;
+    color: var(--ink) !important;
+    font-family: var(--sans) !important;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- compliance bar ---------- */
+  .compliance{
+    background:var(--teal-deep);
+    color:#EAF3F2;
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.02em;
+    text-align:center;
+    padding:8px 16px;
+  }
+  .compliance b{ color:#fff; font-weight:500; }
+
+  /* ---------- nav ---------- */
+  header.custom-landing-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 48px;
+    border-bottom:1px solid var(--border);
+    background:var(--panel);
+    position:sticky; top:0; z-index:20;
+    width: 100%;
+    visibility: visible !important; /* Force visible to override Streamlit's global header hide */
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{
+    width:34px; height:34px; border-radius:8px;
+    background:linear-gradient(135deg,var(--teal),var(--teal-deep));
+    display:flex; align-items:center; justify-content:center;
+  }
+  .brand-name{ font-family:var(--display); font-weight:700; font-size:18px; letter-spacing:-.01em; color: var(--ink); }
+  .brand-tag{ font-family:var(--mono); font-size:11px; color:var(--ink-faint); margin-left:8px; padding-left:8px; border-left:1px solid var(--border); }
+  nav.custom-landing-nav ul{ display:flex; gap:32px; list-style:none; }
+  nav.custom-landing-nav a{ font-size:14px; color:var(--ink-soft); font-weight:500; transition:color .15s; }
+  nav.custom-landing-nav a:hover{ color:var(--ink); }
+  .nav-cta{ display:flex; gap:12px; align-items:center; }
+  .btn-ghost{ font-size:14px; font-weight:500; padding:9px 16px; border-radius:7px; color:var(--ink-soft); }
+  .btn-ghost:hover{ background:var(--bg); }
+  .btn-solid{
+    font-size:14px; font-weight:600; padding:10px 18px; border-radius:7px;
+    background:var(--ink); color:#fff;
+    transition:background .15s;
+  }
+  .btn-solid:hover{ background:var(--teal-deep); }
+
+  /* ---------- hero ---------- */
+  .hero{
+    display:grid; grid-template-columns:1.05fr 0.95fr; gap:56px;
+    padding:36px 48px 72px; max-width:1280px; margin:0 auto;
+    align-items:center;
+  }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--teal-deep); background:#E7F1EF; border:1px solid #CFE3DF;
+    padding:6px 12px; border-radius:20px; margin-bottom:16px;
+    width: fit-content;
+  }
+  .eyebrow-dot{ width:6px; height:6px; border-radius:50%; background:var(--teal); animation:pulse 2s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+  h1.hero-title{
+    font-family:var(--display); font-weight:700; letter-spacing:-.02em;
+    font-size:50px; line-height:1.06; color:var(--ink); margin-bottom:14px;
+  }
+  h1.hero-title em{ font-style:normal; color:var(--teal-deep); }
+  .hero-sub{
+    font-size:17px; line-height:1.65; color:var(--ink-soft); max-width:480px; margin-bottom:24px;
+  }
+  .hero-actions{ display:flex; gap:14px; margin-bottom:28px; }
+  .btn-primary{
+    font-size:15px; font-weight:600; padding:14px 24px; border-radius:8px;
+    background:var(--ink); color:#fff; display:inline-flex; align-items:center; gap:8px;
+    transition:transform .15s, background .15s;
+    cursor: pointer;
+  }
+  .btn-primary:hover{ background:var(--teal-deep); transform:translateY(-1px); }
+  .btn-secondary{
+    font-size:15px; font-weight:600; padding:14px 24px; border-radius:8px;
+    border:1px solid var(--border); color:var(--ink); background:var(--panel);
+    transition:border-color .15s;
+    cursor: pointer;
+  }
+  .btn-secondary:hover{ border-color:var(--ink-faint); }
+
+  .trust-row{ display:flex; gap:28px; flex-wrap:wrap; }
+  .trust-item{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-faint); font-weight:500; }
+  .trust-item svg{ width:16px; height:16px; color:var(--teal); flex-shrink:0; }
+
+  /* ---------- scan panel (signature element) ---------- */
+  .scan-panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:20px; box-shadow:0 1px 2px rgba(16,23,28,.04), 0 12px 32px -16px rgba(16,23,28,.12);
+  }
+  .scan-panel-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .scan-title{ font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); letter-spacing:.04em; }
+  .scan-status{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px; color:var(--teal-deep); font-weight:500; }
+  .scan-status-dot{ width:6px; height:6px; border-radius:50%; background:var(--teal); }
+
+  .scan-stage{
+    position:relative; background:#0C1114; border-radius:10px; overflow:hidden;
+    aspect-ratio:1/1;
+  }
+  .scan-stage svg{ width:100%; height:100%; display:block; }
+
+  .scan-line{
+    position:absolute; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, transparent, #4FD1C5, transparent);
+    box-shadow:0 0 12px 2px rgba(79,209,197,.6);
+    animation:sweep 3.2s ease-in-out infinite;
+  }
+  @keyframes sweep{
+    0%{ top:6%; opacity:0; }
+    8%{ opacity:1; }
+    50%{ top:94%; opacity:1; }
+    58%{ opacity:0; }
+    100%{ top:94%; opacity:0; }
+  }
+
+  .mask-path{
+    fill:rgba(193,84,63,.18); stroke:var(--coral); stroke-width:1.4;
+    stroke-dasharray:220; stroke-dashoffset:220;
+    animation:draw 1.6s .6s ease-out forwards;
+  }
+  @keyframes draw{ to{ stroke-dashoffset:0; } }
+
+  .readout{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px;
+  }
+  .readout-cell{
+    background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px;
+  }
+  .readout-label{ font-family:var(--mono); font-size:10px; color:var(--ink-faint); letter-spacing:.04em; text-transform:uppercase; margin-bottom:4px; }
+  .readout-value{ font-family:var(--mono); font-size:15px; font-weight:500; color:var(--ink); }
+  .readout-value.coral{ color:var(--coral); }
+  .readout-value.teal{ color:var(--teal-deep); }
+
+  /* ---------- stats strip ---------- */
+  .stats-strip{
+    border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+    background:var(--panel);
+    width: 100%;
+  }
+  .stats-inner{
+    max-width:1280px; margin:0 auto; padding:36px 48px;
+    display:grid; grid-template-columns:repeat(4,1fr);
+  }
+  .stat{ padding:0 24px; border-left:1px solid var(--border); }
+  .stat:first-child{ border-left:none; padding-left:0; }
+  .stat-num{ font-family:var(--mono); font-size:32px; font-weight:500; color:var(--ink); letter-spacing:-.01em; }
+  .stat-label{ font-size:12.5px; color:var(--ink-faint); margin-top:6px; letter-spacing:.01em; }
+
+  /* ---------- services ---------- */
+  .section{ max-width:1280px; margin:0 auto; padding:96px 48px; }
+  .section-head{ max-width:640px; margin-bottom:52px; }
+  .section-eyebrow{ font-family:var(--mono); font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--teal-deep); margin-bottom:14px; }
+  .section-head h2{ font-family:var(--display); font-size:34px; font-weight:700; letter-spacing:-.015em; margin-bottom:14px; color: var(--ink); }
+  .section-head p{ font-size:16px; color:var(--ink-soft); line-height:1.6; }
+
+  .grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+  .card{ background:var(--panel); padding:32px 28px; transition:background .15s; text-align: left; }
+  .card:hover{ background:#FBFCFC; }
+  .card-icon{
+    width:40px; height:40px; border-radius:10px; background:var(--bg);
+    display:flex; align-items:center; justify-content:center; margin-bottom:18px;
+    border:1px solid var(--border);
+  }
+  .card-icon svg{ width:20px; height:20px; color:var(--teal-deep); }
+  .card h3{ font-family:var(--display); font-size:17px; font-weight:600; margin-bottom:10px; letter-spacing:-.005em; color: var(--ink); }
+  .card p{ font-size:14px; color:var(--ink-soft); line-height:1.6; margin-bottom:18px; }
+  .card-tag{
+    display:inline-block; font-family:var(--mono); font-size:11px; color:var(--ink-faint);
+    background:var(--bg); border:1px solid var(--border); padding:4px 9px; border-radius:5px;
+  }
+
+  /* ---------- cta ---------- */
+  .cta{
+    background:var(--ink); color:#fff; border-radius:20px;
+    padding:64px 56px; max-width:1280px; margin:0 auto 96px; text-align:center;
+  }
+  .cta h2{ font-family:var(--display); font-size:30px; font-weight:700; margin-bottom:14px; letter-spacing:-.015em; color:#fff; }
+  .cta p{ color:#B7C2C6; font-size:15px; margin-bottom:30px; }
+  .cta .btn-primary{ background:var(--teal); }
+  .cta .btn-primary:hover{ background:#12847E; }
+
+  footer.custom-landing-footer{
+    border-top:1px solid var(--border); padding:28px 48px;
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:12.5px; color:var(--ink-faint); font-family:var(--mono);
+    width: 100%;
+    background: var(--panel);
+  }
+
+  @media (max-width:900px){
+    .hero{ grid-template-columns:1fr; padding:48px 24px; }
+    header.custom-landing-header{ padding:16px 20px; }
+    nav.custom-landing-nav ul{ display:none; }
+    .stats-inner{ grid-template-columns:1fr 1fr; gap:20px 0; padding:28px 24px; }
+    .stat{ border-left:none; padding-left:0; }
+    .grid{ grid-template-columns:1fr; }
+    .section{ padding:64px 24px; }
+    h1.hero-title{ font-size:36px; }
+  }
+</style>
+""", unsafe_allow_html=True)
+
+    # Render entire landing page HTML body (integrated with target_self query params)
     st.markdown("""
-    <div class="hero-section">
-        <span class="hero-brain">🧠</span>
-        <div class="hero-tag">AI-Powered Medical Imaging</div>
-        <h1 class="hero-headline">
-            Discover hope beyond brain tumors with <span>NeuroScan AI</span>
-        </h1>
-        <p class="hero-sub">
-            An end-to-end deep learning platform for brain MRI classification
-            and segmentation — delivering radiologist-grade insights in seconds.
-        </p>
-        <div class="hero-stats">
-            <div>
-                <span class="hero-stat-val">95.3%</span>
-                <span class="hero-stat-lbl">Classification Accuracy</span>
-            </div>
-            <div>
-                <span class="hero-stat-val">81.4%</span>
-                <span class="hero-stat-lbl">Segmentation Dice Score</span>
-            </div>
-            <div>
-                <span class="hero-stat-val">4</span>
-                <span class="hero-stat-lbl">Tumor Classes Detected</span>
-            </div>
-            <div>
-                <span class="hero-stat-val">&lt;100ms</span>
-                <span class="hero-stat-lbl">Inference Latency</span>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Hero CTA Buttons
-    h1, h2, h3 = st.columns([2, 1, 2])
-    with h2:
-        if st.button("🚀 Try Now — Free", use_container_width=True, key="hero_try_now"):
-            st.session_state.page = "login"
-            st.rerun()
-
-    st.markdown("<div style='margin-bottom:0.5rem'></div>", unsafe_allow_html=True)
-
-    # ── Services Section ──────────────────────────────────────────────────────
-    st.markdown("""
-    <div style="margin: 2.5rem 0 1rem 0;">
-        <p class="section-eyebrow">What We Offer</p>
-        <h2 class="section-title">Our Excellent Services</h2>
-        <p class="section-sub">
-            Cutting-edge AI tools designed to assist radiologists and researchers
-            with comprehensive brain tumor diagnostics.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Service card data
-    services = [
-        ("🔍", "Brain Tumor Detection",
-         "Accurately detects and localizes brain tumors from MRI scans using a fine-tuned EfficientNet-B0 classifier with 95.3% accuracy.",
-         "EfficientNet-B0", "#00D4FF"),
-        ("🎯", "Brain Tumor Segmentation",
-         "Produces pixel-level segmentation masks using U-Net with an EfficientNet encoder — achieving 81.4% Dice score on holdout tests.",
-         "U-Net · Dice 81.4%", "#5AC8FA"),
-        ("📊", "Class Prediction",
-         "Predicts one of four tumor classes: Glioma, Meningioma, Pituitary, or No Tumor — with per-class confidence probabilities.",
-         "4-Class · 95.3% Acc", "#34C759"),
-        ("📐", "Brain Tumor Area",
-         "Calculates the cross-sectional lesion area in mm² and cm² based on pixel-level segmentation at standard MRI resolution.",
-         "0.5 mm/pixel resolution", "#FF9500"),
-        ("🔬", "Shape Analysis",
-         "Computes morphological features including circularity, compactness, and solidity to characterize tumor geometry.",
-         "Morphology · Grad-CAM", "#FF3B30"),
-        ("🩺", "XAI · Grad-CAM",
-         "Generates explainable AI saliency maps highlighting which regions of the MRI the classifier weighted most for its prediction.",
-         "Explainable AI", "#BF5AF2"),
-    ]
-
-    row1 = st.columns(3, gap="medium")
-    row2 = st.columns(3, gap="medium")
-    rows = [row1, row2]
-
-    for i, (icon, title, desc, badge, color) in enumerate(services):
-        col = rows[i // 3][i % 3]
-        with col:
-            st.markdown(f"""
-            <div class="service-card" style="--card-color:{color};">
-                <span class="service-icon">{icon}</span>
-                <div class="service-title">{title}</div>
-                <div class="service-desc">{desc}</div>
-                <span class="service-badge" style="background:rgba(255,255,255,0.06);
-                      color:{color}; border:1px solid {color}44;">{badge}</span>
-            </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown("<div style='margin:2rem 0;'></div>", unsafe_allow_html=True)
-
-    # ── Bottom CTA Strip ──────────────────────────────────────────────────────
-    st.markdown("""
-    <div style="background:linear-gradient(135deg,#0D1F33,#0D1117);
-                border:1px solid #21262D; border-radius:16px;
-                padding:2rem; text-align:center; margin-bottom:1rem;">
-        <h3 style="font-family:'Outfit',sans-serif; font-size:1.4rem;
-                   font-weight:700; color:#E6EDF3; margin:0 0 0.5rem 0;">
-            Ready to analyze your MRI scan?
-        </h3>
-        <p style="color:#8B949E; font-size:0.9rem; margin:0 0 1.5rem 0;">
-            Sign in or create a free account to access the full diagnostic suite.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    c1, c2, c3 = st.columns([2, 1, 2])
-    with c2:
-        if st.button("Get Started →", use_container_width=True, key="bottom_cta"):
-            st.session_state.page = "login"
-            st.rerun()
-
-    st.markdown("""
-    <div class="disclaimer-text">
-        🔒 Research &amp; educational use only &nbsp;·&nbsp;
-        Not for primary clinical diagnosis &nbsp;·&nbsp;
-        Patient data processed locally
-    </div>
-    """, unsafe_allow_html=True)
+<div class="compliance">
+<b>Research &amp; clinical decision-support tool</b> — not a standalone diagnostic device. Always confirm findings with a licensed radiologist.
+</div>
+<header class="custom-landing-header">
+<div class="brand">
+<div class="brand-mark">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<path d="M9 3a4 4 0 0 0-4 4 3 3 0 0 0-2 2.8V13a3 3 0 0 0 2 2.8V17a4 4 0 0 0 4 4h1V3H9z"/>
+<path d="M15 3a4 4 0 0 1 4 4 3 3 0 0 1 2 2.8V13a3 3 0 0 1-2 2.8V17a4 4 0 0 1-4 4h-1V3h1z"/>
+<path d="M12 3v18"/>
+</svg>
+</div>
+<span class="brand-name">NeuroScan AI</span>
+<span class="brand-tag">v2.1 · Diagnostic Suite</span>
+</div>
+<nav class="custom-landing-nav">
+<ul>
+<li><a href="#">Product</a></li>
+<li><a href="#services">How it works</a></li>
+<li><a href="#">Validation data</a></li>
+<li><a href="#">Docs</a></li>
+</ul>
+</nav>
+<div class="nav-cta">
+<a href="?nav=login" target="_self" class="btn-ghost">Sign in</a>
+<a href="?nav=login" target="_self" class="btn-solid">Request access</a>
+</div>
+</header>
+<section class="hero">
+<div>
+<div class="eyebrow"><span class="eyebrow-dot"></span> AI-assisted MRI analysis</div>
+<h1 class="hero-title">Brain MRI analysis,<br><em>read in seconds</em>, not hours.</h1>
+<p class="hero-sub">
+NeuroScan AI classifies and segments brain tumors from MRI scans — surfacing tumor type, boundary, and affected area to support faster radiological review.
+</p>
+<div class="hero-actions">
+<a href="?nav=login" target="_self" class="btn-primary">
+Analyze a sample scan
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+</a>
+<a href="#services" target="_self" class="btn-secondary">See how it works</a>
+</div>
+<div class="trust-row">
+<div class="trust-item">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+Validated on holdout MRI dataset
+</div>
+<div class="trust-item">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+Scans processed locally
+</div>
+<div class="trust-item">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+&lt;100ms inference
+</div>
+</div>
+</div>
+<div class="scan-panel">
+<div class="scan-panel-head">
+<span class="scan-title">AXIAL_MRI_SLICE_0042.dcm</span>
+<span class="scan-status"><span class="scan-status-dot"></span>ANALYZING</span>
+</div>
+<div class="scan-stage">
+<svg viewBox="0 0 300 300">
+<defs>
+<radialGradient id="brainGrad" cx="50%" cy="45%" r="60%">
+<stop offset="0%" stop-color="#3A4750"/>
+<stop offset="55%" stop-color="#232D33"/>
+<stop offset="100%" stop-color="#0C1114"/>
+</radialGradient>
+<filter id="noise">
+<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/>
+<feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.03 0"/>
+</filter>
+</defs>
+<ellipse cx="150" cy="150" rx="108" ry="122" fill="url(#brainGrad)"/>
+<path d="M100 70 C130 55,170 55,200 70 C225 85,232 115,222 145 C232 165,228 195,205 215 C185 235,155 240,130 228 C100 240,75 215,72 185 C58 165,62 135,78 112 C70 95,82 78,100 70 Z"
+fill="none" stroke="#4A5860" stroke-width="1.2" opacity="0.7"/>
+<path d="M150 60 C150 100,150 200,150 240" stroke="#4A5860" stroke-width="1" opacity="0.5"/>
+<path d="M95 130 Q150 115,205 130" stroke="#4A5860" stroke-width="1" opacity="0.4"/>
+<path d="M95 175 Q150 190,205 175" stroke="#4A5860" stroke-width="1" opacity="0.4"/>
+<rect width="300" height="300" filter="url(#noise)"/>
+<path class="mask-path" d="M168 118 C182 112,196 120,199 134 C203 150,195 164,180 168 C166 172,152 165,148 150 C144 136,154 124,168 118 Z"/>
+<circle cx="174" cy="141" r="2" fill="var(--coral)"/>
+</svg>
+<div class="scan-line"></div>
+</div>
+<div class="readout">
+<div class="readout-cell">
+<div class="readout-label">Predicted class</div>
+<div class="readout-value coral">Glioma</div>
+</div>
+<div class="readout-cell">
+<div class="readout-label">Confidence</div>
+<div class="readout-value">94.7%</div>
+</div>
+<div class="readout-cell">
+<div class="readout-label">Lesion area</div>
+<div class="readout-value">3.42 cm²</div>
+</div>
+<div class="readout-cell">
+<div class="readout-label">Dice score</div>
+<div class="readout-value teal">0.814</div>
+</div>
+</div>
+</div>
+</section>
+<div class="stats-strip">
+<div class="stats-inner">
+<div class="stat"><div class="stat-num">95.3%</div><div class="stat-label">Classification accuracy</div></div>
+<div class="stat"><div class="stat-num">81.4%</div><div class="stat-label">Segmentation Dice score</div></div>
+<div class="stat"><div class="stat-num">4</div><div class="stat-label">Tumor classes detected</div></div>
+<div class="stat"><div class="stat-num">&lt;100ms</div><div class="stat-label">Inference latency</div></div>
+</div>
+</div>
+<section class="section" id="services">
+<div class="section-head">
+<div class="section-eyebrow">What it does</div>
+<h2>Six tools, one diagnostic pipeline</h2>
+<p>Each MRI scan runs through detection, segmentation, and classification — with explainability built in so radiologists can see what the model saw.</p>
+</div>
+<div class="grid">
+<div class="card">
+<div class="card-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+</div>
+<h3>Tumor detection</h3>
+<p>Locates and flags abnormal tissue from MRI scans using a fine-tuned EfficientNet-B0 classifier trained on labeled scan data.</p>
+<span class="card-tag">EfficientNet-B0</span>
+</div>
+<div class="card">
+<div class="card-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0z"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="2.5"/></svg>
+</div>
+<h3>Tumor segmentation</h3>
+<p>Produces pixel-level segmentation masks with a U-Net + EfficientNet encoder, reaching an 0.814 Dice score on holdout tests.</p>
+<span class="card-tag">U-Net · Dice 0.814</span>
+</div>
+<div class="card">
+<div class="card-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10M10 19V5M16 19v-7M22 19H2"/></svg>
+</div>
+<h3>Class prediction</h3>
+<p>Predicts glioma, meningioma, pituitary tumor, or no tumor, with per-class confidence probabilities shown alongside each result.</p>
+<span class="card-tag">4-class · 95.3% acc</span>
+</div>
+<div class="card">
+<div class="card-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L3 21M8 21H3v-5M16 3h5v5"/></svg>
+</div>
+<h3>Lesion area</h3>
+<p>Calculates cross-sectional lesion area in mm² and cm² from the segmentation mask at standard MRI resolution.</p>
+<span class="card-tag">0.5mm / pixel</span>
+</div>
+<div class="card">
+<div class="card-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l3.5 7.5L23 12l-7.5 1.5L12 21l-3.5-7.5L1 12l7.5-1.5z"/></svg>
+</div>
+<h3>Shape analysis</h3>
+<p>Computes morphological features — circularity, compactness, solidity — to characterize tumor geometry beyond simple size.</p>
+<span class="card-tag">Morphology</span>
+</div>
+<div class="card">
+<div class="card-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+</div>
+<h3>Explainability (Grad-CAM)</h3>
+<p>Generates saliency maps highlighting which regions of the MRI most influenced the classifier's prediction.</p>
+<span class="card-tag">Explainable AI</span>
+</div>
+</div>
+</section>
+<section class="cta">
+<h2>Ready to analyze a scan?</h2>
+<p>Sign in or create a free research account to access the full diagnostic suite.</p>
+<a href="?nav=login" target="_self" class="btn-primary">
+Get started
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+</a>
+</section>
+<footer class="custom-landing-footer">
+<span>© 2026 NeuroScan AI · Research &amp; educational use only</span>
+<span>Not for primary clinical diagnosis · Patient data processed locally</span>
+</footer>
+""", unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -980,27 +1296,216 @@ def render_landing_page():
 def render_login_page():
     """Centered login / sign-up card."""
 
-    # Back to home link
-    back_col, _, _ = st.columns([1, 3, 1])
-    with back_col:
-        if st.button("← Back to Home", key="back_home"):
-            st.session_state.page = "landing"
-            st.rerun()
+    # Inject login page CSS style block
+    st.markdown("""
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-    st.markdown("<div style='margin-top:0.5rem'></div>", unsafe_allow_html=True)
+  :root {
+    --bg: #F5F7F8;
+    --panel: #FFFFFF;
+    --border: #E1E7EA;
+    --ink: #10171C;
+    --ink-soft: #4B5960;
+    --ink-faint: #7C8A91;
+    --teal: #0E6B66;
+    --teal-deep: #0A4F4C;
+    --coral: #C1543F;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Inter', sans-serif;
+    --display: 'Space Grotesk', sans-serif;
+  }
 
-    # Center the card
+  /* Full screen container resets */
+  .block-container {
+    padding-top: 0px !important;
+    padding-bottom: 0px !important;
+    padding-left: 0px !important;
+    padding-right: 0px !important;
+    max-width: 100% !important;
+  }
+
+  html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"], .main {
+    background-color: var(--bg) !important;
+    color: var(--ink) !important;
+    font-family: var(--sans) !important;
+  }
+
+  /* Custom navigation bar */
+  header.custom-landing-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 48px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    width: 100%;
+    visibility: visible !important;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--teal), var(--teal-deep));
+    display: flex; align-items: center; justify-content: center;
+  }
+  .brand-name { font-family: var(--display); font-weight: 700; font-size: 18px; color: var(--ink); }
+  .brand-tag { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--border); }
+  
+  /* Center the card container layout */
+  .auth-outer {
+    max-width: 440px;
+    margin: 48px auto;
+    padding: 0 24px;
+  }
+
+  .auth-card-wrapper {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 40px 36px;
+    box-shadow: 0 1px 3px rgba(16,23,28,.04), 0 16px 40px -24px rgba(16,23,28,.08);
+  }
+
+  .auth-header-block {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .auth-header-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    background: #E7F1EF; border: 1px solid #CFE3DF;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px auto;
+  }
+  .auth-header-icon svg {
+    width: 22px; height: 22px; color: var(--teal);
+  }
+  .auth-card-title {
+    font-family: var(--display); font-weight: 700; font-size: 24px;
+    color: var(--ink); margin-bottom: 8px; letter-spacing: -.01em;
+  }
+  .auth-card-sub {
+    font-size: 14px; color: var(--ink-soft); line-height: 1.5;
+  }
+
+  /* Form Labels */
+  .form-field-label {
+    font-family: var(--sans); font-size: 12.5px; font-weight: 600;
+    color: var(--ink-soft); margin-top: 16px; margin-bottom: 6px;
+  }
+
+  /* Custom overrides for input fields */
+  div[data-testid="stTextInput"] input {
+    background-color: var(--panel) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--ink) !important;
+    font-family: var(--sans) !important;
+    font-size: 14px !important;
+    border-radius: 7px !important;
+    padding: 10px 14px !important;
+    height: auto !important;
+  }
+  div[data-testid="stTextInput"] input:focus {
+    border-color: var(--teal) !important;
+    box-shadow: 0 0 0 2.5px rgba(14, 107, 102, 0.12) !important;
+  }
+
+  /* Custom segmented control styles for tabs */
+  div[data-testid="stRadio"] {
+    background: #EAEFF1;
+    padding: 4px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  div[data-testid="stRadio"] label {
+    font-family: var(--sans) !important;
+    font-size: 13.5px !important;
+    font-weight: 500 !important;
+    color: var(--ink-soft) !important;
+  }
+
+  /* Button Overrides */
+  .stButton > button {
+    background: var(--ink) !important;
+    color: #fff !important;
+    font-family: var(--sans) !important;
+    font-weight: 600 !important;
+    font-size: 14.5px !important;
+    padding: 12px 20px !important;
+    border-radius: 7px !important;
+    border: none !important;
+    transition: background .15s, transform .1s !important;
+    cursor: pointer !important;
+    width: 100%;
+  }
+  .stButton > button:hover {
+    background: var(--teal) !important;
+  }
+  .stButton > button:active {
+    transform: scale(0.985);
+  }
+
+  /* Demo Credentials Panel */
+  .demo-panel {
+    background: #E7F1EF;
+    border: 1px solid #CFE3DF;
+    border-radius: 9px;
+    padding: 14px 18px;
+    margin-top: 16px;
+  }
+  .demo-panel-label {
+    font-family: var(--mono); font-size: 10px; color: var(--teal-deep);
+    letter-spacing: .06em; text-transform: uppercase; font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .demo-panel-value {
+    font-family: var(--mono); font-size: 12px; color: var(--teal-deep);
+  }
+
+  /* Disclaimer info */
+  .login-disclaimer {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-faint);
+    text-align: center; line-height: 1.6; margin-top: 32px;
+    border-top: 1px solid var(--border); padding-top: 14px;
+  }
+</style>
+""", unsafe_allow_html=True)
+
+    # Render header navigation bar
+    st.markdown("""
+<header class="custom-landing-header">
+<div class="brand">
+<div class="brand-mark">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<path d="M9 3a4 4 0 0 0-4 4 3 3 0 0 0-2 2.8V13a3 3 0 0 0 2 2.8V17a4 4 0 0 0 4 4h1V3H9z"/>
+<path d="M15 3a4 4 0 0 1 4 4 3 3 0 0 1 2 2.8V13a3 3 0 0 1-2 2.8V17a4 4 0 0 1-4 4h-1V3h1z"/>
+<path d="M12 3v18"/>
+</svg>
+</div>
+<span class="brand-name">NeuroScan AI</span>
+<span class="brand-tag">v2.1 · Diagnostic Suite</span>
+</div>
+<div class="nav-cta">
+<a href="?nav=landing" target="_self" class="btn-solid" style="background:var(--ink-soft); font-size:13px; font-weight:600; padding:8px 16px; border-radius:6px; color:#fff; text-decoration:none;">← Back to Home</a>
+</div>
+</header>
+""", unsafe_allow_html=True)
+
+    # Center-aligned auth outer block
     _, center_col, _ = st.columns([1, 1.4, 1])
     with center_col:
         st.markdown("""
-        <div style="text-align:center; margin-bottom:1.5rem;">
-            <div class="auth-icon">🔐</div>
-            <h2 class="auth-title">Welcome to NeuroScan AI</h2>
-            <p class="auth-sub">Sign in to your clinical account or create a new one</p>
-        </div>
-        """, unsafe_allow_html=True)
+<div class="auth-outer">
+<div class="auth-card-wrapper">
+<div class="auth-header-block">
+<div class="auth-header-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+<rect x="3" y="11" width="18" height="10" rx="2" ry="2"/>
+<path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+</svg>
+</div>
+<h2 class="auth-card-title">Welcome back</h2>
+<p class="auth-card-sub">Sign in to your clinical workstation or request a new account</p>
+</div>
+""", unsafe_allow_html=True)
 
-        # Tab switcher
         tab = st.radio(
             "Select action",
             ["🔑  Login", "📝  Sign Up"],
@@ -1011,105 +1516,87 @@ def render_login_page():
 
         st.markdown("<div style='margin-top:0.8rem'></div>", unsafe_allow_html=True)
 
-        # ── LOGIN TAB ─────────────────────────────────────────────────────────
         if tab == "🔑  Login":
-            with st.container(border=True):
-                st.markdown("<div class='auth-section'>", unsafe_allow_html=True)
+            st.markdown("<div class='form-field-label'>Username</div>", unsafe_allow_html=True)
+            login_user = st.text_input(
+                "Username", placeholder="Enter your username",
+                label_visibility="collapsed", key="login_user"
+            )
 
-                st.markdown("<div class='auth-label'>Username</div>", unsafe_allow_html=True)
-                login_user = st.text_input(
-                    "Username", placeholder="Enter your username",
-                    label_visibility="collapsed", key="login_user"
-                )
+            st.markdown("<div class='form-field-label'>Password</div>", unsafe_allow_html=True)
+            login_pass = st.text_input(
+                "Password", placeholder="Enter your password",
+                type="password", label_visibility="collapsed", key="login_pass"
+            )
 
-                st.markdown("<div class='auth-label' style='margin-top:0.8rem;'>Password</div>", unsafe_allow_html=True)
-                login_pass = st.text_input(
-                    "Password", placeholder="Enter your password",
-                    type="password", label_visibility="collapsed", key="login_pass"
-                )
+            st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
 
-                st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
+            if st.button("Login →", key="do_login", use_container_width=True):
+                if not login_user or not login_pass:
+                    st.error("Please fill in both fields.")
+                elif login_user in st.session_state.users and \
+                     st.session_state.users[login_user] == login_pass:
+                    st.session_state.logged_in = True
+                    st.session_state.username  = login_user
+                    st.session_state.page      = "dashboard"
+                    st.success(f"Welcome back, {login_user}! Redirecting…")
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid username or password.")
 
-                if st.button("Login →", key="do_login", use_container_width=True):
-                    if not login_user or not login_pass:
-                        st.error("Please fill in both fields.")
-                    elif login_user in st.session_state.users and \
-                         st.session_state.users[login_user] == login_pass:
-                        st.session_state.logged_in = True
-                        st.session_state.username  = login_user
-                        st.session_state.page      = "dashboard"
-                        st.success(f"Welcome back, {login_user}! Redirecting…")
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid username or password.")
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
-            # Demo account hint
+            # Demo credentials panel
             st.markdown("""
-            <div style="background:rgba(0,212,255,0.05); border:1px solid rgba(0,212,255,0.15);
-                        border-radius:8px; padding:0.75rem 1rem; margin-top:0.6rem;">
-                <p style="font-size:0.72rem; color:#8B949E; margin:0 0 0.3rem 0;
-                           font-weight:600; text-transform:uppercase; letter-spacing:0.06em;">
-                    Demo Credentials
-                </p>
-                <p style="font-family:'JetBrains Mono',monospace; font-size:0.78rem;
-                           color:#00D4FF; margin:0;">
-                    Username: <b>demo</b> &nbsp;·&nbsp; Password: <b>demo</b>
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+<div class="demo-panel">
+<div class="demo-panel-label">Demo Credentials</div>
+<div class="demo-panel-value">Username: <b>demo</b> &nbsp;·&nbsp; Password: <b>demo</b></div>
+</div>
+""", unsafe_allow_html=True)
 
-        # ── SIGN UP TAB ───────────────────────────────────────────────────────
         else:
-            with st.container(border=True):
-                st.markdown("<div class='auth-section'>", unsafe_allow_html=True)
+            st.markdown("<div class='form-field-label'>New Username</div>", unsafe_allow_html=True)
+            new_user = st.text_input(
+                "New Username", placeholder="Choose a username",
+                label_visibility="collapsed", key="reg_user"
+            )
 
-                st.markdown("<div class='auth-label'>New Username</div>", unsafe_allow_html=True)
-                new_user = st.text_input(
-                    "New Username", placeholder="Choose a username",
-                    label_visibility="collapsed", key="reg_user"
-                )
+            st.markdown("<div class='form-field-label'>Password</div>", unsafe_allow_html=True)
+            new_pass = st.text_input(
+                "Password", placeholder="Create a password",
+                type="password", label_visibility="collapsed", key="reg_pass"
+            )
 
-                st.markdown("<div class='auth-label' style='margin-top:0.8rem;'>Password</div>", unsafe_allow_html=True)
-                new_pass = st.text_input(
-                    "Password", placeholder="Create a password",
-                    type="password", label_visibility="collapsed", key="reg_pass"
-                )
+            st.markdown("<div class='form-field-label'>Confirm Password</div>", unsafe_allow_html=True)
+            confirm_pass = st.text_input(
+                "Confirm Password", placeholder="Re-enter your password",
+                type="password", label_visibility="collapsed", key="reg_confirm"
+            )
 
-                st.markdown("<div class='auth-label' style='margin-top:0.8rem;'>Confirm Password</div>", unsafe_allow_html=True)
-                confirm_pass = st.text_input(
-                    "Confirm Password", placeholder="Re-enter your password",
-                    type="password", label_visibility="collapsed", key="reg_confirm"
-                )
+            st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
 
-                st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
+            if st.button("Create Account →", key="do_register", use_container_width=True):
+                if not new_user or not new_pass or not confirm_pass:
+                    st.error("Please fill in all fields.")
+                elif new_user in st.session_state.users:
+                    st.error("❌ Username already exists. Please choose another.")
+                elif new_pass != confirm_pass:
+                    st.error("❌ Passwords do not match.")
+                elif len(new_pass) < 4:
+                    st.error("❌ Password must be at least 4 characters.")
+                else:
+                    st.session_state.users[new_user] = new_pass
+                    st.session_state.logged_in = True
+                    st.session_state.username  = new_user
+                    st.session_state.page      = "dashboard"
+                    st.success(f"✅ Account created! Welcome, {new_user}!")
+                    st.rerun()
 
-                if st.button("Create Account →", key="do_register", use_container_width=True):
-                    if not new_user or not new_pass or not confirm_pass:
-                        st.error("Please fill in all fields.")
-                    elif new_user in st.session_state.users:
-                        st.error("❌ Username already exists. Please choose another.")
-                    elif new_pass != confirm_pass:
-                        st.error("❌ Passwords do not match.")
-                    elif len(new_pass) < 4:
-                        st.error("❌ Password must be at least 4 characters.")
-                    else:
-                        st.session_state.users[new_user] = new_pass
-                        st.session_state.logged_in = True
-                        st.session_state.username  = new_user
-                        st.session_state.page      = "dashboard"
-                        st.success(f"✅ Account created! Welcome, {new_user}!")
-                        st.rerun()
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="disclaimer-text" style="margin-top:2rem;">
-        🔒 Research &amp; educational use only &nbsp;·&nbsp;
-        Patient data processed locally &nbsp;·&nbsp; Not for clinical diagnosis
-    </div>
-    """, unsafe_allow_html=True)
+        st.markdown("""
+</div>
+<div class="login-disclaimer">
+🔒 Research &amp; educational use only &nbsp;·&nbsp; Patient data processed locally &nbsp;·&nbsp; Not for clinical diagnosis
+</div>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
