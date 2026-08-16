@@ -594,7 +594,28 @@ SEG_IMG_SIZE     = 256
 
 TUMOR_CLASSES = {"glioma", "meningioma", "pituitary"}
 
+GUARDRAIL_MODEL_PATH = r"C:\TumorOI\models\best_guardrail.pth"
+GUARDRAIL_THRESHOLD  = 0.85
+
 # ── Model Loaders ─────────────────────────────────────────────────────────────
+@st.cache_resource(show_spinner=False)
+def load_guardrail_model():
+    if not os.path.exists(GUARDRAIL_MODEL_PATH):
+        return None, "Model file not found"
+    try:
+        model = efficientnet_b0(weights=None)
+        in_feat = model.classifier[1].in_features
+        model.classifier[1] = nn.Sequential(
+            nn.Dropout(p=0.2, inplace=True),
+            nn.Linear(in_feat, 2)
+        )
+        state = torch.load(GUARDRAIL_MODEL_PATH, map_location=DEVICE, weights_only=False)
+        model.load_state_dict(state)
+        model.to(DEVICE).eval()
+        return model, None
+    except Exception as e:
+        return None, str(e)
+
 @st.cache_resource(show_spinner=False)
 def load_classifier():
     model = efficientnet_b0(weights=None)
@@ -648,23 +669,39 @@ clf_transform = transforms.Compose([
 ])
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
-def is_mri_image(pil_img: Image.Image):
+def is_mri_image(pil_img: Image.Image, guardrail_model=None):
     img_rgb  = np.array(pil_img.convert("RGB"))
     img_gray = np.array(pil_img.convert("L"))
     img_hsv  = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
     mean_sat = img_hsv[:, :, 1].mean()
     if mean_sat > 60:
-        return False, f"High saturation ({mean_sat:.1f}/255). MRI is greyscale."
+        return False, "The image contains color saturation (brain MRI scans must be grayscale)."
     mean_brightness = img_gray.mean()
     if mean_brightness > 200:
-        return False, f"Image too bright ({mean_brightness:.1f}/255)."
+        return False, "The image average brightness is too high."
     dark_ratio = (img_gray < 40).sum() / img_gray.size
     if dark_ratio < 0.15:
-        return False, f"Low dark background ratio ({dark_ratio*100:.1f}%)."
+        return False, "The image lacks standard dark background contrast."
     bright_ratio = (img_gray > 60).sum() / img_gray.size
     if bright_ratio < 0.05:
-        return False, f"Almost entirely black ({bright_ratio*100:.1f}%)."
-    return True, "Valid scan format"
+        return False, "The image is too dark (insufficient scan data)."
+        
+    # Run deep learning guardrail classifier
+    if guardrail_model is not None:
+        try:
+            tensor = clf_transform(pil_img.convert("RGB")).unsqueeze(0).to(DEVICE)
+            with torch.no_grad():
+                outputs = guardrail_model(tensor)
+                probs = torch.softmax(outputs, dim=1)[0].cpu().numpy()
+            # Index 1 is MRI, Index 0 is Non-MRI
+            mri_prob = float(probs[1])
+            if mri_prob < GUARDRAIL_THRESHOLD:
+                return False, "The image is not recognized as a brain MRI scan."
+            return True, f"MRI scan format verified (Confidence: {mri_prob*100:.1f}%)"
+        except Exception as e:
+            return True, "MRI scan format verified (Defaulted to heuristics)"
+            
+    return True, "MRI scan format verified"
 
 def predict_class(model, pil_img: Image.Image):
     tensor = clf_transform(pil_img.convert("RGB")).unsqueeze(0).to(DEVICE)
@@ -1084,6 +1121,7 @@ def render_dashboard_page():
     with st.spinner("Initializing models..."):
         clf_model   = load_classifier()
         seg_model, seg_err = load_segmentation_model()
+        guardrail_model, guardrail_err = load_guardrail_model()
         metrics     = load_metrics()
         seg_metrics = load_seg_metrics()
 
@@ -1186,7 +1224,7 @@ def render_dashboard_page():
     if uploaded:
         step = 1
         pil_img = Image.open(uploaded)
-        is_mri, mri_reason = is_mri_image(pil_img)
+        is_mri, mri_reason = is_mri_image(pil_img, guardrail_model)
         if is_mri:
             step = 2
             predicted_class, probs = predict_class(clf_model, pil_img)
@@ -1227,9 +1265,6 @@ def render_dashboard_page():
                 <div class="pipe-step-title">Segmentation</div>
             </div>
             """, unsafe_allow_html=True)
-
-        if uploaded and not is_mri and mri_reason != "":
-            st.error(f"Image Rejected: {mri_reason}")
 
         # Logout button at bottom of left col
         st.markdown("<div style='margin-top:0.5rem'></div>", unsafe_allow_html=True)
@@ -1280,6 +1315,27 @@ def render_dashboard_page():
                     }
                     lbl, theme_color, stroke_color, status_lbl, status_bg = class_info_map[predicted_class]
                     conf = probs[CLASSES.index(predicted_class)] * 100
+                    
+                    # If classification confidence is below 70%, flag as uncertain
+                    if conf < 70.0:
+                        status_lbl = "Uncertain Prediction"
+                        stroke_color = "#FF9500"  # Warning Orange
+                        status_bg = "#2A2118"
+                        
+                    # Display warning banner FIRST if confidence is low
+                    if conf < 70.0:
+                        st.warning("⚠️ Uncertain Prediction — Radiologist Review Recommended")
+                    
+                    # Split label to color name (e.g. Meningioma) and leave suffix (e.g. Findings) white
+                    if " Findings" in lbl:
+                        lbl_name = lbl.replace(" Findings", "")
+                        lbl_suffix = " Findings"
+                    elif " Detected" in lbl:
+                        lbl_name = lbl.replace(" Detected", "")
+                        lbl_suffix = " Detected"
+                    else:
+                        lbl_name = lbl
+                        lbl_suffix = ""
 
                     # Patient context row
                     if st.session_state.patient_name:
@@ -1307,7 +1363,7 @@ def render_dashboard_page():
                     st.markdown(f"""
                     <div class="circle-progress-container">
                         <div>
-                            <h3 style="font-family: 'Outfit', sans-serif; font-weight: 700; color: #E6EDF3; margin: 0; font-size: 1.3rem;">{lbl}</h3>
+                            <h3 style="font-family: 'Outfit', sans-serif; font-weight: 700; color: #E6EDF3; margin: 0; font-size: 1.3rem;"><span style="color: {stroke_color}; text-shadow: 0 0 12px {stroke_color}33;">{lbl_name}</span>{lbl_suffix}</h3>
                             <div style="display: inline-block; background-color: {status_bg}; color: {stroke_color}; font-size: 0.72rem; font-weight: 700; padding: 2px 10px; border-radius: 99px; margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid {stroke_color}44;">{status_lbl}</div>
                             <p style="color: #8B949E; font-size: 0.8rem; margin: 0; margin-top: 0.4rem;">Classification Confidence</p>
                         </div>
@@ -1326,9 +1382,9 @@ def render_dashboard_page():
                         bar_color = class_info_map[c][2]
                         status_lbl_other = class_info_map[c][3]
                         st.markdown(f"""
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; margin-bottom: 0.25rem;">
-                            <span style="color: #8B949E;">{c_lbl} ({status_lbl_other})</span>
-                            <span style="font-family:'JetBrains Mono',monospace; font-weight: 600; color: #E6EDF3;">{p_pct:.1f}%</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; margin-bottom: 0.25rem;">
+                            <span style="color: {bar_color}; font-weight: 600;">{c_lbl} <span style="color: #8B949E; font-size: 0.72rem; font-weight: normal;">({status_lbl_other})</span></span>
+                            <span style="font-family:'JetBrains Mono',monospace; font-weight: 700; color: #E6EDF3;">{p_pct:.1f}%</span>
                         </div>
                         <div class="bar-wrap" style="height: 5px; margin-bottom: 0.75rem;">
                             <div class="bar-fill" style="width: {p_pct}%; background-color: {bar_color};"></div>
@@ -1416,7 +1472,10 @@ def render_dashboard_page():
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.warning(f"MRI guardrail failed: {mri_reason}")
+                with st.container(border=True):
+                    st.markdown("<div class='pro-card-title'>Uploaded Image (Rejected)</div>", unsafe_allow_html=True)
+                    st.image(pil_img, use_container_width=True)
+                st.error("Invalid Scan: The uploaded image is not recognized as a valid brain MRI. Please upload a clear brain MRI scan to proceed.")
         else:
             st.markdown("""
             <div style="background-color:#161B22; border:1px solid #21262D; border-radius:12px;
@@ -1463,7 +1522,7 @@ def render_dashboard_page():
                             </div>
                             <p style="font-size:0.70rem; color:#8B949E; margin-top:0.5rem; line-height:1.4;">
                                 Red/yellow regions indicate areas the classifier weighted most heavily
-                                when predicting <strong style="color:#E6EDF3;">{predicted_class.capitalize()}</strong>.
+                                when predicting <strong style="color:{stroke_color}; text-transform: uppercase; letter-spacing: 0.05em;">{predicted_class}</strong>.
                             </p>
                         </div>""", unsafe_allow_html=True)
                 else:
