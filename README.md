@@ -7,14 +7,17 @@ An end-to-end, medical imaging deep learning pipeline built to classify brain tu
 ## 🚀 Key Features
 
 - **Automated Workflow Pipeline**: Upload an MRI scan and the application automatically runs a multi-step analysis workflow:
-  1. **Image Validation**: Checks if the upload is a valid grayscale brain MRI.
-  2. **Classification**: Evaluates whether a tumor is present and classifies it into one of four classes.
+  1. **Image Validation**: Checks if the upload is a valid grayscale brain MRI via hybrid guardrails.
+  2. **Classification**: Evaluates whether a tumor is present and classifies it into one of four classes (`Glioma`, `Meningioma`, `Pituitary`, `No Tumor`).
   3. **Segmentation**: If a tumor is detected, identifies the exact spatial region and renders a pixel-level overlay.
+  4. **Explainable AI (XAI)**: Generates Grad-CAM class activation maps showing model focal areas.
+  5. **Standardized PDF Report Generation**: Instant export and download of a clinical diagnostic report with tri-view imaging, quantitative morphology, and patient demographics.
 - **Interactive Segmentation Overlay**: Displays the tumor contour and probability overlay on top of the original MRI scan.
 - **Robust Verification Check**: Includes an automated verification script to check dependencies, CUDA runtime compatibility, and GPU execution support.
 - **Deep Learning Architectures**:
   - **Classifier**: Fine-tuned **EfficientNet-B0** classification model achieving **95.3% test accuracy**.
   - **Segmenter**: **U-Net** architecture with an **EfficientNet-B0 encoder** achieving a **81.4% Dice Score**.
+
 
 ---
 

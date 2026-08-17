@@ -1,3 +1,6 @@
+import io
+import datetime
+import random
 import streamlit as st
 import torch
 import torch.nn as nn
@@ -10,6 +13,25 @@ import traceback
 import cv2
 from torchvision import transforms
 from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
+
+# ── Database Layer (SQLite Persistence) ───────────────────────────────────────
+import database as db
+db.init_db()
+
+# ── PDF Generation Imports (ReportLab) ─────────────────────────────────────────
+try:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether, HRFlowable
+    )
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
 
 # ── Page Config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -33,19 +55,16 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
     st.session_state.username = ""
-if "users" not in st.session_state:
-    # Demo accounts: {username: password}
-    st.session_state.users = {
-        "doctor":  "brain123",
-        "admin":   "neuro2025",
-        "demo":    "demo",
-    }
+if "role" not in st.session_state:
+    st.session_state.role = "doctor"
 if "patient_name" not in st.session_state:
     st.session_state.patient_name = ""
 if "patient_age" not in st.session_state:
     st.session_state.patient_age = 25
 if "patient_gender" not in st.session_state:
     st.session_state.patient_gender = "Not specified"
+
+
 
 # ── CSS (DICOM Clinical Workstation Theme + Landing + Auth) ────────────────────
 st.markdown("""
@@ -567,8 +586,8 @@ div[data-testid="stFileUploader"] {
     box-shadow: 0 0 0 2px rgba(0,212,255,0.15) !important;
 }
 
-/* ── st.button overrides ── */
-.stButton > button {
+/* ── st.button & st.download_button overrides ── */
+.stButton > button, .stDownloadButton > button {
     background: linear-gradient(135deg, #00D4FF, #0099BB) !important;
     color: #0D1117 !important;
     font-family: 'Outfit', sans-serif !important;
@@ -579,10 +598,11 @@ div[data-testid="stFileUploader"] {
     transition: all 0.2s ease !important;
     width: 100%;
 }
-.stButton > button:hover {
+.stButton > button:hover, .stDownloadButton > button:hover {
     box-shadow: 0 4px 16px rgba(0,212,255,0.35) !important;
     transform: translateY(-1px) !important;
 }
+
 
 /* ── Patient info card ── */
 .patient-chip {
@@ -848,6 +868,338 @@ def overlay_gradcam(pil_img: Image.Image, cam: np.ndarray, alpha: float = 0.5):
     heatmap   = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
     blended   = cv2.addWeighted(img_rgb, 1 - alpha, heatmap, alpha, 0)
     return Image.fromarray(blended), Image.fromarray(heatmap)
+
+
+# ── Clinical PDF Report Generator ─────────────────────────────────────────────
+def generate_clinical_pdf_report(
+    patient_name: str,
+    patient_age: int,
+    patient_gender: str,
+    username: str,
+    predicted_class: str,
+    probs: np.ndarray,
+    classes: list,
+    pil_img: Image.Image,
+    overlay_img: Image.Image = None,
+    gradcam_img: Image.Image = None,
+    area_data: dict = None,
+    shape_data: dict = None,
+    conf_data: dict = None,
+) -> bytes:
+    """Generate a formal DICOM-grade Clinical Diagnostic PDF Report."""
+    if not REPORTLAB_AVAILABLE:
+        raise RuntimeError("ReportLab is not installed. Please run: pip install reportlab")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=32,
+        bottomMargin=32
+    )
+
+    title_style = ParagraphStyle(
+        'DocTitle',
+        fontName='Helvetica-Bold',
+        fontSize=15,
+        leading=18,
+        textColor=colors.HexColor('#0B2545')
+    )
+    meta_style = ParagraphStyle(
+        'DocMeta',
+        fontName='Helvetica',
+        fontSize=7.5,
+        leading=10,
+        alignment=TA_RIGHT,
+        textColor=colors.HexColor('#566573')
+    )
+    sec_heading = ParagraphStyle(
+        'SecHeading',
+        fontName='Helvetica-Bold',
+        fontSize=9.5,
+        leading=12,
+        textColor=colors.HexColor('#0B2545'),
+        spaceBefore=4,
+        spaceAfter=2
+    )
+    body_text = ParagraphStyle(
+        'BodyDark',
+        fontName='Helvetica',
+        fontSize=8,
+        leading=10.5,
+        textColor=colors.HexColor('#1C2833')
+    )
+    body_bold = ParagraphStyle(
+        'BodyBold',
+        fontName='Helvetica-Bold',
+        fontSize=8,
+        leading=10.5,
+        textColor=colors.HexColor('#1C2833')
+    )
+    cell_hdr = ParagraphStyle(
+        'CellHdr',
+        fontName='Helvetica-Bold',
+        fontSize=7.5,
+        leading=9.5,
+        textColor=colors.white,
+        alignment=TA_CENTER
+    )
+    cell_txt = ParagraphStyle(
+        'CellTxt',
+        fontName='Helvetica',
+        fontSize=7.5,
+        leading=9.5,
+        textColor=colors.HexColor('#1C2833'),
+        alignment=TA_CENTER
+    )
+    img_caption = ParagraphStyle(
+        'ImgCaption',
+        fontName='Helvetica-Bold',
+        fontSize=7,
+        leading=8.5,
+        textColor=colors.HexColor('#2C3E50'),
+        alignment=TA_CENTER
+    )
+    disclaimer_style = ParagraphStyle(
+        'DisclaimerTxt',
+        fontName='Helvetica-Oblique',
+        fontSize=6.5,
+        leading=8,
+        textColor=colors.HexColor('#7F8C8D'),
+        alignment=TA_JUSTIFY
+    )
+
+    story = []
+
+    # 1. Header Banner
+    now_str = datetime.datetime.now().strftime("%B %d, %Y %H:%M:%S")
+    report_id = f"RPT-{datetime.datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
+
+    header_data = [
+        [
+            Paragraph("<b>PROHEALTH NEUROSCAN AI WORKSTATION</b><br/><font color='#0084FF' size='7.5'>CLINICAL BRAIN MRI DIAGNOSTIC &amp; SEGMENTATION REPORT</font>", title_style),
+            Paragraph(f"<b>Report ID:</b> {report_id}<br/><b>Generated:</b> {now_str}<br/><b>Attending Clinician:</b> {username or 'Doctor'}", meta_style)
+        ]
+    ]
+    t_hdr = Table(header_data, colWidths=[4.0*inch, 3.5*inch])
+    t_hdr.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(t_hdr)
+    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#0084FF'), spaceBefore=2, spaceAfter=4))
+
+    # 2. Patient & Exam Demographics Card
+    p_name_display = patient_name.strip() if patient_name and patient_name.strip() else "Anonymous / Unspecified"
+    patient_table_data = [
+        [
+            Paragraph("<b>Patient Name:</b>", body_bold), Paragraph(p_name_display, body_text),
+            Paragraph("<b>Age / Gender:</b>", body_bold), Paragraph(f"{patient_age} yrs · {patient_gender}", body_text),
+        ],
+        [
+            Paragraph("<b>Study Modality:</b>", body_bold), Paragraph("Brain MRI (Axial T1/T2/FLAIR)", body_text),
+            Paragraph("<b>AI Model Backbone:</b>", body_bold), Paragraph("EfficientNet-B0 + U-Net + Grad-CAM", body_text),
+        ]
+    ]
+    t_patient = Table(patient_table_data, colWidths=[1.2*inch, 2.5*inch, 1.2*inch, 2.6*inch])
+    t_patient.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F4F6F9')),
+        ('BOX', (0,0), (-1,-1), 0.75, colors.HexColor('#D5D8DC')),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E8E8')),
+        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
+        ('LEFTPADDING', (0,0), (-1,-1), 5),
+        ('RIGHTPADDING', (0,0), (-1,-1), 5),
+    ]))
+    story.append(t_patient)
+    story.append(Spacer(1, 4))
+
+    # 3. Diagnostic Impression
+    conf_pct = probs[classes.index(predicted_class)] * 100
+    class_meta = {
+        "glioma":      ("GLIOMA PATHOLOGY DETECTED",       "#D9534F", "Malignant / High-Grade Neoplasm"),
+        "meningioma":  ("MENINGIOMA PATHOLOGY DETECTED",   "#E67E22", "Typically Benign / Extra-axial Lesion"),
+        "pituitary":   ("PITUITARY PATHOLOGY DETECTED",    "#0275D8", "Typically Benign / Sellar Lesion"),
+        "notumor":     ("NO PATHOLOGY DETECTED",           "#27AE60", "Normal Brain Scan / No Focal Lesion Identified"),
+    }
+    banner_title, banner_color, banner_sub = class_meta.get(predicted_class, (predicted_class.upper(), "#333333", "Clinical Review"))
+
+    diag_banner_data = [
+        [
+            Paragraph(f"<font color='white' size='10'><b>PRIMARY DIAGNOSTIC VERDICT: {banner_title}</b></font><br/><font color='#F0F3F4' size='7.5'>{banner_sub}</font>", ParagraphStyle('WhiteBanner', fontName='Helvetica-Bold', leading=11, alignment=TA_LEFT)),
+            Paragraph(f"<font color='white' size='12'><b>{conf_pct:.1f}%</b></font><br/><font color='#F0F3F4' size='6.5'>CONFIDENCE</font>", ParagraphStyle('WhiteBannerR', fontName='Helvetica-Bold', leading=12, alignment=TA_CENTER))
+        ]
+    ]
+    t_diag_banner = Table(diag_banner_data, colWidths=[6.0*inch, 1.5*inch])
+    t_diag_banner.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor(banner_color)),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('LEFTPADDING', (0,0), (-1,-1), 6),
+        ('RIGHTPADDING', (0,0), (-1,-1), 6),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(t_diag_banner)
+    story.append(Spacer(1, 4))
+
+    # 4. Multi-class Probability Breakdown Table
+    story.append(Paragraph("Pathology Classification Likelihoods", sec_heading))
+    prob_headers = [
+        Paragraph("Pathology Class", cell_hdr),
+        Paragraph("Clinical Nature", cell_hdr),
+        Paragraph("Model Probability", cell_hdr),
+        Paragraph("Diagnostic Status", cell_hdr)
+    ]
+    prob_rows = [prob_headers]
+    for c in sorted(classes, key=lambda x: -probs[classes.index(x)]):
+        p_val = probs[classes.index(c)] * 100
+        is_top = (c == predicted_class)
+        c_title, _, c_desc = class_meta.get(c, (c.title(), "", ""))
+        status_str = "<b>POSITIVE IDENTIFICATION</b>" if is_top else "Ruled Out / Negative"
+        prob_rows.append([
+            Paragraph(f"<b>{c.title()}</b>" if is_top else c.title(), cell_txt),
+            Paragraph(c_desc.split('/')[0].strip(), cell_txt),
+            Paragraph(f"<b>{p_val:.2f}%</b>" if is_top else f"{p_val:.2f}%", cell_txt),
+            Paragraph(status_str, cell_txt)
+        ])
+    t_prob = Table(prob_rows, colWidths=[1.7*inch, 2.4*inch, 1.4*inch, 2.0*inch])
+    t_prob.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0B2545')),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#D5D8DC')),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F8F9F9')]),
+    ]))
+    story.append(t_prob)
+    story.append(Spacer(1, 4))
+
+    # 5. Diagnostic Imaging Tri-View Panel
+    story.append(Paragraph("Visual Diagnostic & Explainability Panel (Tri-View)", sec_heading))
+
+    def _pil_to_rl(img_obj, max_dim=1.75*inch):
+        if img_obj is None:
+            return Paragraph("<font color='#888888'>N/A</font>", cell_txt)
+        buf = io.BytesIO()
+        rgb = img_obj.convert("RGB")
+        rgb.save(buf, format="PNG")
+        buf.seek(0)
+        w, h = rgb.size
+        asp = h / float(w)
+        if asp > 1.0:
+            rh = max_dim
+            rw = max_dim / asp
+        else:
+            rw = max_dim
+            rh = max_dim * asp
+        return RLImage(buf, width=rw, height=rh)
+
+    rl_orig = _pil_to_rl(pil_img)
+    rl_over = _pil_to_rl(overlay_img) if overlay_img is not None else Paragraph("<br/><br/><b>No Tumor Segmented</b><br/><font size='6.5' color='#7F8C8D'>Healthy scan / No lesion mask</font>", cell_txt)
+    rl_grad = _pil_to_rl(gradcam_img) if gradcam_img is not None else Paragraph("<br/><br/><b>Grad-CAM N/A</b>", cell_txt)
+
+    img_table_data = [
+        [rl_orig, rl_over, rl_grad],
+        [
+            Paragraph("<b>1. Original MRI Input</b><br/><font size='6.5' color='#566573'>Preprocessed Grayscale Scan</font>", img_caption),
+            Paragraph("<b>2. U-Net Pathology Overlay</b><br/><font size='6.5' color='#566573'>Spatial Boundary Delineation</font>", img_caption),
+            Paragraph("<b>3. Grad-CAM Saliency Map</b><br/><font size='6.5' color='#566573'>XAI Class Activation Attention</font>", img_caption),
+        ]
+    ]
+    t_images = Table(img_table_data, colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
+    t_images.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#D5D8DC')),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#EAEDED')),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F8F9FA')),
+        ('BACKGROUND', (0,1), (-1,1), colors.HexColor('#EDF2F7')),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+    ]))
+    story.append(t_images)
+    story.append(Spacer(1, 4))
+
+    # 6. Quantitative Morphometrics & Volumetric Profiling (if tumor detected)
+    if predicted_class in ["glioma", "meningioma", "pituitary"] and (area_data or shape_data):
+        story.append(Paragraph("Quantitative Morphological & Volumetric Profiling", sec_heading))
+        morph_rows = [
+            [
+                Paragraph("Metric Description", cell_hdr),
+                Paragraph("Calculated Value", cell_hdr),
+                Paragraph("Metric Description", cell_hdr),
+                Paragraph("Calculated Value", cell_hdr),
+            ]
+        ]
+
+        area_mm2_str = f"{area_data.get('area_mm2', 0):,.1f} mm²" if area_data else "N/A"
+        area_cm2_str = f"{area_data.get('area_cm2', 0):.2f} cm²" if area_data else "N/A"
+        cov_str = f"{area_data.get('coverage_pct', 0):.2f}%" if area_data else "N/A"
+        px_str = f"{area_data.get('pixel_count', 0):,}" if area_data else "N/A"
+
+        shape_label = shape_data.get('shape_label', 'N/A') if shape_data else "N/A"
+        circ_str = f"{shape_data.get('circularity', 0):.3f}" if shape_data else "N/A"
+        comp_str = f"{shape_data.get('compactness', 0):.3f}" if shape_data else "N/A"
+        sol_str  = f"{shape_data.get('solidity', 0):.3f}" if shape_data else "N/A"
+
+        morph_rows.append([
+            Paragraph("<b>Estimated Tumor Area:</b>", body_text), Paragraph(f"<b>{area_mm2_str}</b> ({area_cm2_str})", body_bold),
+            Paragraph("<b>Tumor Boundary Geometry:</b>", body_text), Paragraph(f"<b>{shape_label}</b>", body_bold),
+        ])
+        morph_rows.append([
+            Paragraph("<b>Hemisphere Coverage:</b>", body_text), Paragraph(f"{cov_str} ({px_str} px)", body_text),
+            Paragraph("<b>Circularity Index:</b>", body_text), Paragraph(circ_str, body_text),
+        ])
+        morph_rows.append([
+            Paragraph("<b>Spatial Resolution:</b>", body_text), Paragraph("~0.50 mm/pixel standard", body_text),
+            Paragraph("<b>Compactness / Solidity:</b>", body_text), Paragraph(f"{comp_str} / {sol_str}", body_text),
+        ])
+
+        if conf_data:
+            morph_rows.append([
+                Paragraph("<b>Mean Mask Confidence:</b>", body_text), Paragraph(f"{conf_data.get('mean', 0)*100:.1f}%", body_text),
+                Paragraph("<b>High-Confidence Area (≥75%):</b>", body_text), Paragraph(f"{conf_data.get('high_conf_pct', 0):.1f}%", body_text),
+            ])
+
+        t_morph = Table(morph_rows, colWidths=[1.8*inch, 1.95*inch, 1.8*inch, 1.95*inch])
+        t_morph.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0B2545')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#D5D8DC')),
+            ('TOPPADDING', (0,0), (-1,-1), 1.5),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 1.5),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F8F9F9')]),
+        ]))
+        story.append(t_morph)
+        story.append(Spacer(1, 4))
+
+    # 7. Radiological Sign-off & Medical Disclaimer
+    sign_data = [
+        [
+            Paragraph("<b>Automated Diagnostic Assessment:</b><br/><font size='7' color='#566573'>Computer-aided findings generated by NeuroScan AI Pipeline (EfficientNet-B0 + U-Net + Grad-CAM). For clinical corroboration by certified medical professionals.</font>", body_text),
+            Paragraph(f"<b>Examining Clinician:</b><br/><font size='7.5' color='#0B2545'>Dr. / Clinician: {username or 'Attending Radiologist'}</font><br/><br/><b>Digital Signature:</b> ___________________________", body_text)
+        ]
+    ]
+    t_sign = Table(sign_data, colWidths=[4.8*inch, 2.7*inch])
+    t_sign.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+    ]))
+    story.append(t_sign)
+    story.append(Spacer(1, 3))
+
+    story.append(Paragraph(
+        "<b>MEDICAL DISCLAIMER:</b> This automated computer-aided diagnosis report is provided for educational, research, and assistive clinical decision support purposes only. It is not an autonomous replacement for clinical pathological biopsy or definitive radiological review.",
+        disclaimer_style
+    ))
+
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1511,7 +1863,7 @@ def render_login_page():
 
         tab = st.radio(
             "Select action",
-            ["🔑  Login", "📝  Sign Up"],
+            ["🔑  Login", "🔒  Account Provisioning Policy"],
             horizontal=True,
             label_visibility="collapsed",
             key="auth_tab",
@@ -1537,61 +1889,67 @@ def render_login_page():
             if st.button("Login →", key="do_login", use_container_width=True):
                 if not login_user or not login_pass:
                     st.error("Please fill in both fields.")
-                elif login_user in st.session_state.users and \
-                     st.session_state.users[login_user] == login_pass:
-                    st.session_state.logged_in = True
-                    st.session_state.username  = login_user
-                    st.session_state.page      = "dashboard"
-                    st.success(f"Welcome back, {login_user}! Redirecting…")
-                    st.rerun()
                 else:
-                    st.error("❌ Invalid username or password.")
+                    user_record = db.authenticate_user(login_user.strip(), login_pass)
+                    if user_record:
+                        st.session_state.logged_in = True
+                        st.session_state.username  = user_record["username"]
+                        st.session_state.role      = user_record["role"]
+                        st.session_state.page      = "dashboard"
+                        db.log_activity(
+                            username=user_record["username"],
+                            action="USER_LOGIN",
+                            role=user_record["role"],
+                            details=f"User logged into {user_record['role'].title()} portal",
+                            status="SUCCESS"
+                        )
+                        st.success(f"Welcome back, {user_record['username']}! Accessing {user_record['role'].title()} portal…")
+                        st.rerun()
+                    else:
+                        db.log_error(
+                            error_type="AUTH_FAILED",
+                            severity="WARNING",
+                            message=f"Failed login attempt for username: '{login_user.strip()}'",
+                            component="auth",
+                            username=login_user.strip()
+                        )
+                        db.log_activity(
+                            username=login_user.strip(),
+                            action="USER_LOGIN",
+                            role="unknown",
+                            details=f"Failed password attempt for '{login_user.strip()}'",
+                            status="FAILED"
+                        )
+                        st.error("❌ Invalid username or password.")
+
 
             # Demo credentials panel
             st.markdown("""
 <div class="demo-panel">
-<div class="demo-panel-label">Demo Credentials</div>
-<div class="demo-panel-value">Username: <b>demo</b> &nbsp;·&nbsp; Password: <b>demo</b></div>
+<div class="demo-panel-label">Quick Demo Access by Role</div>
+<div class="demo-panel-value" style="margin-bottom:4px;">👨‍⚕️ <b>Doctor:</b> <code>doctor</code> &nbsp;·&nbsp; <code>brain123</code></div>
+<div class="demo-panel-value" style="margin-bottom:4px;">👤 <b>Patient:</b> <code>patient</code> &nbsp;·&nbsp; <code>patient123</code></div>
+<div class="demo-panel-value">⚙️ <b>Admin:</b> <code>admin</code> &nbsp;·&nbsp; <code>neuro2025</code></div>
 </div>
 """, unsafe_allow_html=True)
 
         else:
-            st.markdown("<div class='form-field-label'>New Username</div>", unsafe_allow_html=True)
-            new_user = st.text_input(
-                "New Username", placeholder="Choose a username",
-                label_visibility="collapsed", key="reg_user"
-            )
+            st.markdown("""
+            <div style="background:rgba(0,212,255,0.06); border:1px solid rgba(0,212,255,0.2); border-radius:8px; padding:1.2rem; margin-top:0.4rem;">
+                <h4 style="color:#00D4FF; margin:0 0 0.6rem 0; font-size:0.95rem; font-family:'Outfit', sans-serif;">🔒 Institutional Role-Based Access Policy</h4>
+                <div style="font-size:0.83rem; color:#E6EDF3; line-height:1.7;">
+                    • <b>👨‍⚕️ Clinicians / Doctors:</b> Accounts are created exclusively by the <b>System Administrator</b> inside the Admin Console.<br/>
+                    • <b>👤 Patients:</b> Accounts are onboarded and provisioned by your <b>Consulting Doctor</b> during clinical intake.<br/>
+                    • <b>⚙️ SuperAdmin:</b> System Administration for user management, hardware diagnostics, and pipeline auditing.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
+            st.info("💡 If you already have credentials assigned by your physician or hospital administration, switch to the '🔑 Login' tab above.")
 
-            st.markdown("<div class='form-field-label'>Password</div>", unsafe_allow_html=True)
-            new_pass = st.text_input(
-                "Password", placeholder="Create a password",
-                type="password", label_visibility="collapsed", key="reg_pass"
-            )
 
-            st.markdown("<div class='form-field-label'>Confirm Password</div>", unsafe_allow_html=True)
-            confirm_pass = st.text_input(
-                "Confirm Password", placeholder="Re-enter your password",
-                type="password", label_visibility="collapsed", key="reg_confirm"
-            )
 
-            st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
 
-            if st.button("Create Account →", key="do_register", use_container_width=True):
-                if not new_user or not new_pass or not confirm_pass:
-                    st.error("Please fill in all fields.")
-                elif new_user in st.session_state.users:
-                    st.error("❌ Username already exists. Please choose another.")
-                elif new_pass != confirm_pass:
-                    st.error("❌ Passwords do not match.")
-                elif len(new_pass) < 4:
-                    st.error("❌ Password must be at least 4 characters.")
-                else:
-                    st.session_state.users[new_user] = new_pass
-                    st.session_state.logged_in = True
-                    st.session_state.username  = new_user
-                    st.session_state.page      = "dashboard"
-                    st.success(f"✅ Account created! Welcome, {new_user}!")
-                    st.rerun()
 
         st.markdown("""
 </div>
@@ -1617,22 +1975,31 @@ def render_dashboard_page():
 
     # ── Top Bar Header ─────────────────────────────────────────────────────────
     patient_display = st.session_state.patient_name if st.session_state.patient_name else "No Patient"
-    username_display = st.session_state.username or "User"
+    username_display = st.session_state.username or "Doctor"
+    is_superadmin = st.session_state.get("role") == "admin"
+
 
     st.markdown(f"""
     <div class="top-bar">
         <div class="logo-container">
-            🧠&nbsp; NeuroScan AI
+            🧠&nbsp; NeuroScan AI <span style="color:#8B949E; font-size:0.85rem; font-weight:400; margin-left:8px;">| Clinical Workstation</span>
         </div>
         <div class="top-bar-right">
             <span><span class="status-dot"></span>Models Online</span>
             <span>EfficientNet-B0 &nbsp;·&nbsp; U-Net</span>
+            <span class="patient-chip" style="color:#00D4FF; border-color:rgba(0,212,255,0.3);">👨‍⚕️ Clinician: @{username_display}</span>
             <span class="patient-chip">👤 {patient_display}</span>
-            <span style="color:#00D4FF; font-weight:600;">@{username_display}</span>
-            <span style="color:#30363D;">v2.0</span>
+            <span style="color:#30363D;">v2.1</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+    if is_superadmin:
+        st.info("⚙️ **SuperAdmin Mode**: You are auditing the Doctor Workstation.")
+        if st.button("← Return to Admin Console", key="superadmin_return_btn"):
+            st.session_state.role = "admin"
+            st.rerun()
+
 
     # ── Layout Grid ────────────────────────────────────────────────────────────
     col_left, col_center, col_right = st.columns([1.1, 2, 1.2], gap="large")
@@ -1657,60 +2024,124 @@ def render_dashboard_page():
 
         # ── Patient Info Card ─────────────────────────────────────────────────
         with st.container(border=True):
-            st.markdown("<div class='pro-card-title'>👤 Patient Information</div>", unsafe_allow_html=True)
+            st.markdown("<div class='pro-card-title'>👤 Patient Profile &amp; Directory</div>", unsafe_allow_html=True)
 
-            p_name = st.text_input(
-                "Patient Name",
-                value=st.session_state.patient_name,
-                placeholder="Enter patient name…",
-                key="pi_name",
-                label_visibility="visible",
+            all_db_patients = db.get_all_patients()
+            patient_options = ["Custom / Manual Entry"] + [f"{p['full_name']} ({p.get('mrn', 'MRN')}) - {p['age']}y" for p in all_db_patients]
+            
+            selected_pat_opt = st.selectbox(
+                "Select Registered Patient",
+                patient_options,
+                key="pat_select_dropdown",
+                label_visibility="collapsed"
             )
-            st.session_state.patient_name = p_name
 
-            p_col1, p_col2 = st.columns(2)
-            with p_col1:
-                p_age = st.number_input(
-                    "Age",
-                    min_value=1, max_value=120,
-                    value=st.session_state.patient_age,
-                    key="pi_age",
+            if selected_pat_opt != "Custom / Manual Entry":
+                # Find selected patient details
+                idx = patient_options.index(selected_pat_opt) - 1
+                matched_pat = all_db_patients[idx]
+                st.session_state.patient_name = matched_pat["full_name"]
+                st.session_state.patient_age = matched_pat["age"]
+                st.session_state.patient_gender = matched_pat["gender"]
+                p_name = matched_pat["full_name"]
+                p_age = matched_pat["age"]
+                p_gender = matched_pat["gender"]
+                st.markdown(f"<span style='font-size:0.75rem; color:#3FB950;'>✓ Selected: <b>{p_name}</b> ({matched_pat.get('mrn', 'MRN')})</span>", unsafe_allow_html=True)
+            else:
+                p_name = st.text_input(
+                    "Patient Name",
+                    value=st.session_state.patient_name,
+                    placeholder="Enter patient name…",
+                    key="pi_name",
+                    label_visibility="visible",
                 )
-                st.session_state.patient_age = p_age
-            with p_col2:
-                p_gender = st.selectbox(
-                    "Gender",
-                    ["Not specified", "Male", "Female", "Other"],
-                    index=["Not specified", "Male", "Female", "Other"].index(
-                        st.session_state.patient_gender
-                    ),
-                    key="pi_gender",
-                )
-                st.session_state.patient_gender = p_gender
+                st.session_state.patient_name = p_name
 
-            # Patient summary chip row
-            if p_name:
-                st.markdown(f"""
-                <div style="margin-top:0.6rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
-                    <span style="background:rgba(63,185,80,0.1); color:#3FB950;
-                                 border:1px solid rgba(63,185,80,0.25); border-radius:99px;
-                                 font-size:0.68rem; padding:0.2rem 0.6rem; font-family:'JetBrains Mono',monospace;">
-                        ✓ {p_name}
-                    </span>
-                    <span style="background:rgba(0,212,255,0.08); color:#00D4FF;
-                                 border:1px solid rgba(0,212,255,0.2); border-radius:99px;
-                                 font-size:0.68rem; padding:0.2rem 0.6rem; font-family:'JetBrains Mono',monospace;">
-                        Age {p_age} · {p_gender}
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
+                p_col1, p_col2 = st.columns(2)
+                with p_col1:
+                    p_age = st.number_input(
+                        "Age",
+                        min_value=1, max_value=120,
+                        value=st.session_state.patient_age,
+                        key="pi_age",
+                    )
+                    st.session_state.patient_age = p_age
+                with p_col2:
+                    p_gender = st.selectbox(
+                        "Gender",
+                        ["Not specified", "Male", "Female", "Other"],
+                        index=["Not specified", "Male", "Female", "Other"].index(
+                            st.session_state.patient_gender
+                        ),
+                        key="pi_gender",
+                    )
+                    st.session_state.patient_gender = p_gender
+
+            # Expandable Doctor-Only Patient Onboarding tool
+            with st.expander("➕ Onboard New Patient (Create Portal Account)"):
+                st.markdown("<p style='font-size:0.74rem; color:#8B949E;'>Provision patient portal login credentials &amp; clinical demographic profile.</p>", unsafe_allow_html=True)
+                new_pat_name = st.text_input("Patient Full Name", placeholder="e.g. John Doe", key="new_p_fn")
+                c_np1, c_np2 = st.columns(2)
+                with c_np1:
+                    new_pat_age = st.number_input("Patient Age", min_value=1, max_value=120, value=30, key="new_p_age")
+                with c_np2:
+                    new_pat_gen = st.selectbox("Gender", ["Male", "Female", "Other"], key="new_p_gen")
+                
+                c_np3, c_np4 = st.columns(2)
+                with c_np3:
+                    new_pat_user = st.text_input("Portal Username", placeholder="e.g. j_doe", key="new_p_user")
+                with c_np4:
+                    new_pat_pass = st.text_input("Portal Password", type="password", placeholder="Enter password", key="new_p_pass")
+
+                if st.button("➕ Register Patient Account", key="btn_create_pat_account", use_container_width=True):
+                    if not new_pat_name or not new_pat_user or not new_pat_pass:
+                        st.error("Please fill in all patient profile and portal login fields.")
+                    else:
+                        pid, err = db.create_patient_account(
+                            username=new_pat_user,
+                            password=new_pat_pass,
+                            full_name=new_pat_name,
+                            age=int(new_pat_age),
+                            gender=new_pat_gen,
+                            doctor_username=st.session_state.username
+                        )
+                        if err:
+                            st.error(f"❌ {err}")
+                        else:
+                            st.session_state.patient_name = new_pat_name
+                            st.session_state.patient_age = int(new_pat_age)
+                            st.session_state.patient_gender = new_pat_gen
+                            st.success(f"✓ Patient @{new_pat_user} ({new_pat_name}) registered successfully!")
+                            st.rerun()
+
 
         # ── MRI Upload Card ───────────────────────────────────────────────────
         with st.container(border=True):
             st.markdown("<div class='pro-card-title'>Upload MRI Scan</div>", unsafe_allow_html=True)
             uploaded = st.file_uploader("Upload MRI", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
 
+        if st.button("🔓 Sign Out", key="doc_logout_btn", use_container_width=True):
+            db.log_activity(
+                username=st.session_state.username or "doctor",
+                action="USER_LOGOUT",
+                role=st.session_state.role,
+                details="Doctor signed out",
+                status="SUCCESS"
+            )
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.session_state.page = "landing"
+            st.rerun()
+
+
     # Automatic Pipeline Execution
+    area_data = None
+    shape_data = None
+    conf_data = None
+    overlay_img = None
+    pdf_report_bytes = None
+    pdf_gen_error = None
+
     if uploaded:
         step = 1
         pil_img = Image.open(uploaded)
@@ -1729,9 +2160,122 @@ def render_dashboard_page():
             step = 3
             if has_tumor and seg_model:
                 binary_mask, prob_map = predict_segmentation(seg_model, pil_img)
+                overlay_img = overlay_mask_on_image(pil_img, binary_mask, alpha=0.45)
+                px_count, total_px, cov_pct, area_mm2, area_cm2 = compute_tumor_area(binary_mask, pil_img)
+                area_data = {
+                    "pixel_count": px_count,
+                    "total_pixels": total_px,
+                    "coverage_pct": cov_pct,
+                    "area_mm2": area_mm2,
+                    "area_cm2": area_cm2
+                }
+                shape_data = compute_shape_analysis(binary_mask)
+                if prob_map is not None:
+                    conf_data = compute_confidence_stats(prob_map, binary_mask)
                 step = 4
             else:
                 step = 4 # Completed (no tumor skips segmentation)
+
+            # Save scan record to SQLite database
+            try:
+                patient_id = db.create_or_get_patient(
+                    full_name=st.session_state.patient_name,
+                    age=st.session_state.patient_age,
+                    gender=st.session_state.patient_gender
+                )
+                db.save_scan_record(
+                    filename=uploaded.name,
+                    is_valid_mri=True,
+                    guardrail_reason=mri_reason,
+                    patient_id=patient_id,
+                    doctor_username=st.session_state.username,
+                    predicted_class=predicted_class,
+                    confidence=float(probs[CLASSES.index(predicted_class)] * 100),
+                    probabilities_dict={c: float(p) for c, p in zip(CLASSES, probs)},
+                    area_data=area_data,
+                    shape_data=shape_data
+                )
+            except Exception as exc:
+                db.log_error(
+                    error_type="DB_SAVE_ERROR",
+                    severity="ERROR",
+                    message=str(exc),
+                    stack_trace=traceback.format_exc(),
+                    component="database",
+                    username=st.session_state.username,
+                    filename=uploaded.name
+                )
+
+            # Generate PDF diagnostic report in memory & store in database
+            if REPORTLAB_AVAILABLE and pil_img is not None:
+                try:
+                    pdf_report_bytes = generate_clinical_pdf_report(
+                        patient_name=st.session_state.patient_name,
+                        patient_age=st.session_state.patient_age,
+                        patient_gender=st.session_state.patient_gender,
+                        username=st.session_state.username,
+                        predicted_class=predicted_class,
+                        probs=probs,
+                        classes=CLASSES,
+                        pil_img=pil_img,
+                        overlay_img=overlay_img,
+                        gradcam_img=gradcam_img,
+                        area_data=area_data,
+                        shape_data=shape_data,
+                        conf_data=conf_data,
+                    )
+
+                    # Store Report in SQLite Database
+                    clean_name = "".join(c for c in (st.session_state.patient_name or "Patient") if c.isalnum() or c in ('_', '-'))
+                    rep_code = f"RPT-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    rep_fname = f"NeuroScan_Report_{clean_name}_{datetime.datetime.now().strftime('%Y%m%d')}.pdf"
+                    db.save_report(
+                        report_code=rep_code,
+                        patient_name=st.session_state.patient_name or "Anonymous Patient",
+                        predicted_class=predicted_class,
+                        confidence=float(probs[CLASSES.index(predicted_class)] * 100),
+                        pdf_bytes=pdf_report_bytes,
+                        pdf_filename=rep_fname,
+                        scan_id=scan_id if 'scan_id' in locals() else None,
+                        patient_id=patient_id if 'patient_id' in locals() else None,
+                        patient_age=st.session_state.patient_age,
+                        patient_gender=st.session_state.patient_gender,
+                        doctor_username=st.session_state.username,
+                        tumor_area_cm2=area_data['area_cm2'] if area_data else None
+                    )
+                    db.log_activity(
+                        username=st.session_state.username or "doctor",
+                        action="REPORT_GENERATE",
+                        role=st.session_state.role,
+                        details=f"Generated clinical PDF report '{rep_code}' for patient '{st.session_state.patient_name or 'Anonymous'}' (Diagnosis: {predicted_class.title()})",
+                        status="SUCCESS"
+                    )
+
+                except Exception as exc:
+                    pdf_gen_error = str(exc)
+                    db.log_error(
+                        error_type="PDF_GEN_ERROR",
+                        severity="ERROR",
+                        message=str(exc),
+                        stack_trace=traceback.format_exc(),
+                        component="pdf_report",
+                        username=st.session_state.username,
+                        filename=uploaded.name
+                    )
+            elif not REPORTLAB_AVAILABLE:
+                pdf_gen_error = "ReportLab library not installed. Please run `pip install reportlab`."
+
+        else:
+            db.log_error(
+                error_type="GUARDRAIL_REJECTED",
+                severity="WARNING",
+                message=f"Guardrail rejected scan: {mri_reason}",
+                component="guardrail",
+                username=st.session_state.username,
+                filename=uploaded.name
+            )
+
+
 
     # Render pipeline cards in col_left
     with col_left:
@@ -1880,6 +2424,23 @@ def render_dashboard_page():
                             <div class="bar-fill" style="width: {p_pct}%; background-color: {bar_color};"></div>
                         </div>
                         """, unsafe_allow_html=True)
+
+                    # Quick Report Download in Diagnosis card
+                    if pdf_report_bytes is not None:
+                        st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
+                        p_display_name = st.session_state.patient_name.strip() if st.session_state.patient_name else "Patient"
+                        clean_name = "".join(c for c in p_display_name if c.isalnum() or c in ('_', '-'))
+                        now_stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                        pdf_filename = f"NeuroScan_Report_{clean_name}_{now_stamp}.pdf"
+                        st.download_button(
+                            label="📄 Download Diagnostic Report (PDF)",
+                            data=pdf_report_bytes,
+                            file_name=pdf_filename,
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="btn_download_report_center"
+                        )
+
 
                 # ── Tumor Area Calculation Card ────────────────────────────────────────
                 st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
@@ -2092,6 +2653,41 @@ def render_dashboard_page():
                 else:
                     st.markdown("<div style='color:#8B949E; font-size:0.82rem; text-align:center; padding:0.75rem 0;'>No tumor detected — confidence map unavailable.</div>", unsafe_allow_html=True)
 
+            # ── Clinical Diagnostic Report Export Card ─────────────────────────
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>📄 Clinical Report Export</div>", unsafe_allow_html=True)
+                p_display_name = st.session_state.patient_name.strip() if st.session_state.patient_name else "Patient"
+                clean_name = "".join(c for c in p_display_name if c.isalnum() or c in ('_', '-'))
+                now_stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                pdf_filename = f"NeuroScan_Report_{clean_name}_{now_stamp}.pdf"
+
+                st.markdown("""
+                <p style="font-size:0.75rem; color:#8B949E; margin-bottom:0.7rem; line-height:1.4;">
+                    Export a DICOM-compliant diagnostic summary with patient demographics, class probabilities, tri-view visual scans, and morphometry.
+                </p>
+                """, unsafe_allow_html=True)
+
+                if pdf_report_bytes is not None:
+                    st.download_button(
+                        label="📄 Download Diagnostic Report (PDF)",
+                        data=pdf_report_bytes,
+                        file_name=pdf_filename,
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="btn_download_report_right"
+                    )
+                    st.markdown("""
+                    <div style="font-size:0.68rem; color:#3FB950; text-align:center; margin-top:0.35rem; font-family:'JetBrains Mono', monospace;">
+                        ✓ High-res PDF generated &amp; ready to export
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    if pdf_gen_error:
+                        st.warning(f"⚠️ {pdf_gen_error}")
+                    else:
+                        st.info("Analysis required to generate report.")
+
+
         else:
             with st.container(border=True):
                 st.markdown("<div style='color:#8B949E; font-size:0.85rem; text-align:center; padding:2rem 0;'>Awaiting scan input to run diagnosis...</div>", unsafe_allow_html=True)
@@ -2101,6 +2697,714 @@ def render_dashboard_page():
             🔒 Research &amp; educational use only &nbsp;·&nbsp; Not for primary clinical diagnosis &nbsp;·&nbsp; Patient data processed locally
         </div>
         """, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATIENT PORTAL
+# ─────────────────────────────────────────────────────────────────────────────
+
+def render_patient_dashboard():
+    """Simplified, patient-friendly portal for review and personal health summary."""
+    with st.spinner("Loading AI health assistant..."):
+        clf_model = load_classifier()
+        seg_model, seg_err = load_segmentation_model()
+        guardrail_model, guardrail_err = load_guardrail_model()
+
+    username_display = st.session_state.username or "Patient"
+    patient_name_val = st.session_state.patient_name or username_display
+
+    # Top Bar Header
+    st.markdown(f"""
+    <div class="top-bar">
+        <div class="logo-container">
+            🧠&nbsp; NeuroScan AI <span style="color:#8B949E; font-size:0.85rem; font-weight:400; margin-left:8px;">| Patient Portal</span>
+        </div>
+        <div class="top-bar-right">
+            <span class="patient-chip" style="color:#3FB950; border-color:rgba(63,185,80,0.3);">👤 Patient: @{username_display}</span>
+            <span><span class="status-dot"></span>System Active</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_p_left, col_p_center, col_p_right = st.columns([1, 1.8, 1.2], gap="large")
+
+    uploaded = None
+    pil_img = None
+    is_mri = False
+    predicted_class = None
+    probs = None
+    has_tumor = False
+    binary_mask = None
+    prob_map = None
+    overlay_img = None
+    area_data = None
+    pdf_report_bytes = None
+
+    with col_p_left:
+        st.markdown("<p style='font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; color:#8B949E; margin-bottom:0.75rem;'>Patient Info &amp; Upload</p>", unsafe_allow_html=True)
+        
+        with st.container(border=True):
+            st.markdown("<div class='pro-card-title'>👤 My Profile</div>", unsafe_allow_html=True)
+            p_name = st.text_input("Full Name", value=st.session_state.patient_name or username_display.title(), key="pat_name_input")
+            st.session_state.patient_name = p_name
+
+            c_age, c_gen = st.columns(2)
+            with c_age:
+                p_age = st.number_input("Age", min_value=1, max_value=120, value=st.session_state.patient_age, key="pat_age_input")
+                st.session_state.patient_age = p_age
+            with c_gen:
+                p_gender = st.selectbox("Gender", ["Not specified", "Male", "Female", "Other"], index=["Not specified", "Male", "Female", "Other"].index(st.session_state.patient_gender), key="pat_gen_input")
+                st.session_state.patient_gender = p_gender
+
+        with st.container(border=True):
+            st.markdown("<div class='pro-card-title'>Upload My Brain MRI Scan</div>", unsafe_allow_html=True)
+            st.markdown("<p style='font-size:0.75rem; color:#8B949E; margin-bottom:0.6rem;'>Upload your MRI scan (JPG/PNG). The AI will verify and provide an accessible summary.</p>", unsafe_allow_html=True)
+            uploaded = st.file_uploader("Upload Scan", type=["jpg", "jpeg", "png"], label_visibility="collapsed", key="patient_uploader")
+
+        st.markdown("<div style='margin-top:0.5rem'></div>", unsafe_allow_html=True)
+        if st.button("🔓 Logout", key="pat_logout_btn", use_container_width=True):
+            db.log_activity(
+                username=st.session_state.username or "patient",
+                action="USER_LOGOUT",
+                role="patient",
+                details="Patient signed out of session",
+                status="SUCCESS"
+            )
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.session_state.page = "landing"
+            st.rerun()
+
+
+    # Process Scan
+    if uploaded:
+        pil_img = Image.open(uploaded)
+        is_mri, mri_reason = is_mri_image(pil_img, guardrail_model)
+        if is_mri:
+            predicted_class, probs = predict_class(clf_model, pil_img)
+            has_tumor = predicted_class in TUMOR_CLASSES
+            if has_tumor and seg_model:
+                binary_mask, prob_map = predict_segmentation(seg_model, pil_img)
+                overlay_img = overlay_mask_on_image(pil_img, binary_mask, alpha=0.45)
+                px_count, total_px, cov_pct, area_mm2, area_cm2 = compute_tumor_area(binary_mask, pil_img)
+                area_data = {
+                    "pixel_count": px_count, "total_pixels": total_px, "coverage_pct": cov_pct,
+                    "area_mm2": area_mm2, "area_cm2": area_cm2
+                }
+
+            # Save scan record to database
+            try:
+                patient_id = db.create_or_get_patient(
+                    full_name=st.session_state.patient_name,
+                    age=st.session_state.patient_age,
+                    gender=st.session_state.patient_gender
+                )
+                db.save_scan_record(
+                    filename=uploaded.name,
+                    is_valid_mri=True,
+                    guardrail_reason=mri_reason,
+                    patient_id=patient_id,
+                    doctor_username=st.session_state.username,
+                    predicted_class=predicted_class,
+                    confidence=float(probs[CLASSES.index(predicted_class)] * 100),
+                    probabilities_dict={c: float(p) for c, p in zip(CLASSES, probs)},
+                    area_data=area_data
+                )
+            except Exception as exc:
+                db.log_error(
+                    error_type="DB_SAVE_ERROR",
+                    severity="ERROR",
+                    message=str(exc),
+                    stack_trace=traceback.format_exc(),
+                    component="database",
+                    username=st.session_state.username,
+                    filename=uploaded.name
+                )
+
+            if REPORTLAB_AVAILABLE and pil_img is not None:
+                try:
+                    pdf_report_bytes = generate_clinical_pdf_report(
+                        patient_name=st.session_state.patient_name,
+                        patient_age=st.session_state.patient_age,
+                        patient_gender=st.session_state.patient_gender,
+                        username="Patient Self-Service Portal",
+                        predicted_class=predicted_class,
+                        probs=probs,
+                        classes=CLASSES,
+                        pil_img=pil_img,
+                        overlay_img=overlay_img,
+                        area_data=area_data,
+                    )
+
+                    # Store Report in SQLite Database
+                    clean_name = "".join(c for c in (st.session_state.patient_name or "Patient") if c.isalnum() or c in ('_', '-'))
+                    rep_code = f"PAT-RPT-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    rep_fname = f"Patient_Report_{clean_name}_{datetime.datetime.now().strftime('%Y%m%d')}.pdf"
+                    db.save_report(
+                        report_code=rep_code,
+                        patient_name=st.session_state.patient_name or "Anonymous Patient",
+                        predicted_class=predicted_class,
+                        confidence=float(probs[CLASSES.index(predicted_class)] * 100),
+                        pdf_bytes=pdf_report_bytes,
+                        pdf_filename=rep_fname,
+                        patient_id=patient_id if 'patient_id' in locals() else None,
+                        patient_age=st.session_state.patient_age,
+                        patient_gender=st.session_state.patient_gender,
+                        doctor_username=st.session_state.username or "patient",
+                        tumor_area_cm2=area_data['area_cm2'] if area_data else None
+                    )
+                except Exception as exc:
+                    pdf_report_bytes = None
+                    db.log_error(
+                        error_type="PDF_GEN_ERROR",
+                        severity="ERROR",
+                        message=str(exc),
+                        stack_trace=traceback.format_exc(),
+                        component="pdf_report",
+                        username=st.session_state.username,
+                        filename=uploaded.name
+                    )
+
+        else:
+            db.log_error(
+                error_type="GUARDRAIL_REJECTED",
+                severity="WARNING",
+                message=f"Patient portal guardrail rejected scan: {mri_reason}",
+                component="guardrail",
+                username=st.session_state.username,
+                filename=uploaded.name
+            )
+
+
+    with col_p_center:
+        st.markdown("<p style='font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; color:#8B949E; margin-bottom:0.75rem;'>Scan Results &amp; Summary</p>", unsafe_allow_html=True)
+        if pil_img:
+            if is_mri:
+                with st.container(border=True):
+                    st.markdown("<div class='pro-card-title'>Your MRI Scan Visual</div>", unsafe_allow_html=True)
+                    if has_tumor and overlay_img is not None:
+                        v1, v2 = st.columns(2)
+                        with v1:
+                            st.image(pil_img, caption="Original Scan", use_container_width=True)
+                        with v2:
+                            st.image(overlay_img, caption="AI Highlighted Region", use_container_width=True)
+                    else:
+                        st.image(pil_img, caption="Original Brain MRI Scan", use_container_width=True)
+
+                # Plain-Language Health Verdict Card
+                with st.container(border=True):
+                    st.markdown("<div class='pro-card-title'>Health Verdict Summary</div>", unsafe_allow_html=True)
+                    conf_val = probs[CLASSES.index(predicted_class)] * 100
+
+                    if predicted_class == "notumor":
+                        st.markdown(f"""
+                        <div style="background:rgba(52,199,89,0.12); border:1px solid rgba(52,199,89,0.3); border-radius:10px; padding:1.2rem; margin-bottom:0.8rem;">
+                            <h3 style="color:#34C759; margin:0 0 0.4rem 0; font-family:'Outfit', sans-serif;">✅ Normal Scan (No Tumor Detected)</h3>
+                            <p style="color:#E6EDF3; font-size:0.88rem; margin:0; line-height:1.5;">
+                                The AI analysis did not find any abnormal tumor tissue in this brain scan (<b>{conf_val:.1f}% confidence</b>).
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif predicted_class in ["meningioma", "pituitary"]:
+                        p_name_title = "Meningioma" if predicted_class == "meningioma" else "Pituitary"
+                        st.markdown(f"""
+                        <div style="background:rgba(255,149,0,0.12); border:1px solid rgba(255,149,0,0.3); border-radius:10px; padding:1.2rem; margin-bottom:0.8rem;">
+                            <h3 style="color:#FF9500; margin:0 0 0.4rem 0; font-family:'Outfit', sans-serif;">ℹ️ Possible {p_name_title} Tissue Detected</h3>
+                            <p style="color:#E6EDF3; font-size:0.88rem; margin:0; line-height:1.5;">
+                                The AI detected patterns consistent with <b>{p_name_title}</b> (<b>{conf_val:.1f}% confidence</b>). 
+                                These types of tumors are <b>typically benign (non-cancerous)</b> and grow slowly, but require medical consultation.
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:  # glioma
+                        st.markdown(f"""
+                        <div style="background:rgba(255,59,48,0.12); border:1px solid rgba(255,59,48,0.3); border-radius:10px; padding:1.2rem; margin-bottom:0.8rem;">
+                            <h3 style="color:#FF3B30; margin:0 0 0.4rem 0; font-family:'Outfit', sans-serif;">⚠️ Abnormal Region Flagged (Glioma Pattern)</h3>
+                            <p style="color:#E6EDF3; font-size:0.88rem; margin:0; line-height:1.5;">
+                                The AI detected focal tissue patterns matching <b>Glioma</b> (<b>{conf_val:.1f}% confidence</b>). 
+                                <b>Immediate consultation with a neurologist or neuro-specialist is strongly advised</b> for formal clinical review.
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    if area_data:
+                        st.markdown(f"""
+                        <div style="font-size:0.82rem; color:#8B949E; margin-top:0.6rem;">
+                            📏 <b>Estimated Lesion Area:</b> ~{area_data['area_cm2']:.2f} cm² ({area_data['area_mm2']:,.1f} mm²)
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            else:
+                st.error("Invalid image: Please upload a clear brain MRI scan in JPG or PNG format.")
+        else:
+            st.markdown("""
+            <div style="background-color:#161B22; border:1px solid #21262D; border-radius:12px;
+                        padding:5rem 2rem; text-align:center;">
+                <span style="font-size:3rem;">🧠</span>
+                <h4 style="color:#E6EDF3; margin-top:0.8rem;">Ready for Scan Upload</h4>
+                <p style="color:#8B949E; font-size:0.85rem;">Upload your brain MRI on the left to receive your AI health insights.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col_p_right:
+        st.markdown("<p style='font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; color:#8B949E; margin-bottom:0.75rem;'>Actions &amp; Guidance</p>", unsafe_allow_html=True)
+        
+        # Download Report Card
+        with st.container(border=True):
+            st.markdown("<div class='pro-card-title'>📄 My Health Summary Report</div>", unsafe_allow_html=True)
+            if pdf_report_bytes is not None:
+                p_display_name = st.session_state.patient_name.strip() if st.session_state.patient_name else "Patient"
+                clean_name = "".join(c for c in p_display_name if c.isalnum() or c in ('_', '-'))
+                pdf_filename = f"Patient_Report_{clean_name}_{datetime.datetime.now().strftime('%Y%m%d')}.pdf"
+                st.markdown("<p style='font-size:0.75rem; color:#8B949E;'>Download a complete copy of your AI scan summary to share with your physician.</p>", unsafe_allow_html=True)
+                st.download_button(
+                    label="📄 Download Patient Report (PDF)",
+                    data=pdf_report_bytes,
+                    file_name=pdf_filename,
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="pat_dl_btn"
+                )
+            else:
+                st.markdown("<p style='font-size:0.78rem; color:#8B949E; text-align:center; padding:1rem 0;'>Upload a scan to generate your report.</p>", unsafe_allow_html=True)
+
+        # Recommended Next Steps
+        with st.container(border=True):
+            st.markdown("<div class='pro-card-title'>🩺 Recommended Next Steps</div>", unsafe_allow_html=True)
+            st.markdown("""
+            <div style="font-size:0.78rem; color:#E6EDF3; line-height:1.6;">
+                1. 📋 <b>Share with your Doctor</b>: Bring this report to your neurologist or general physician.<br/>
+                2. 🔍 <b>Clinical Correlation</b>: AI results are assistive and must be evaluated alongside clinical symptoms.<br/>
+                3. 💊 <b>Medical Advice</b>: Do not stop, start, or change medications without consulting a licensed doctor.
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class="disclaimer-text">
+            🔒 Research &amp; educational use only · Patient data processed locally · Not for clinical diagnosis
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADMIN CONSOLE
+# ─────────────────────────────────────────────────────────────────────────────
+
+def render_admin_dashboard():
+    """System administration console for user management and AI system diagnostics."""
+    username_display = st.session_state.username or "Admin"
+
+    # Top Bar Header
+    st.markdown(f"""
+    <div class="top-bar">
+        <div class="logo-container">
+            ⚙️&nbsp; NeuroScan AI <span style="color:#8B949E; font-size:0.85rem; font-weight:400; margin-left:8px;">| System Administration Console</span>
+        </div>
+        <div class="top-bar-right">
+            <span class="patient-chip" style="color:#FF9500; border-color:rgba(255,149,0,0.3);">⚙️ SuperAdmin: @{username_display}</span>
+            <span><span class="status-dot"></span>System Online</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Top KPI Metrics Strip
+    all_db_users = db.get_all_users()
+    total_users = len(all_db_users)
+    doc_count = sum(1 for u in all_db_users if u["role"] == "doctor")
+    pat_count = sum(1 for u in all_db_users if u["role"] == "patient")
+
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        with st.container(border=True):
+            st.metric("Registered Users", f"{total_users}")
+    with k2:
+        with st.container(border=True):
+            st.metric("Doctors / Clinicians", f"{doc_count}")
+    with k3:
+        with st.container(border=True):
+            st.metric("Patients Registered", f"{pat_count}")
+    with k4:
+        with st.container(border=True):
+            st.metric("Compute Engine", "CUDA 12.1" if torch.cuda.is_available() else "CPU")
+
+
+    tab_users, tab_activity, tab_reports, tab_sys, tab_models, tab_errors = st.tabs([
+        "👥 User & Role Management",
+        "📝 User Activity & Login Logs",
+        "📋 Diagnostic Reports Archive",
+        "🖥️ System & GPU Diagnostics",
+        "🔬 Model Registry & Audit",
+        "🚨 System Error Logs"
+    ])
+
+
+    with tab_users:
+        col_u1, col_u2 = st.columns([1.5, 1.2], gap="large")
+
+        with col_u1:
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>Active User Accounts Directory (Database)</div>", unsafe_allow_html=True)
+                
+                # Table Headers
+                h1, h2, h3 = st.columns([1.4, 1.4, 0.8])
+                h1.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Username</span>", unsafe_allow_html=True)
+                h2.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Assigned Role</span>", unsafe_allow_html=True)
+                h3.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Status</span>", unsafe_allow_html=True)
+                st.markdown("<hr style='border:0; border-top:1px solid #21262D; margin:0.3rem 0 0.6rem 0;'>", unsafe_allow_html=True)
+
+                for u in all_db_users:
+                    uname = u["username"]
+                    role = u["role"]
+                    r_col = "#00D4FF" if role == "doctor" else ("#3FB950" if role == "patient" else "#FF9500")
+                    r_badge = "👨‍⚕️ Doctor" if role == "doctor" else ("👤 Patient" if role == "patient" else "⚙️ Admin")
+                    
+                    r1, r2, r3 = st.columns([1.4, 1.4, 0.8])
+                    r1.markdown(f"<span style='font-weight:600; color:#E6EDF3; font-size:0.85rem;'>@{uname}</span>", unsafe_allow_html=True)
+                    r2.markdown(f"<span style='background:{r_col}18; color:{r_col}; border:1px solid {r_col}44; border-radius:99px; font-size:0.72rem; padding:2px 8px; font-weight:600;'>{r_badge}</span>", unsafe_allow_html=True)
+                    r3.markdown("<span style='color:#3FB950; font-size:0.75rem;'>● Active</span>", unsafe_allow_html=True)
+                    st.markdown("<div style='margin-bottom:0.4rem;'></div>", unsafe_allow_html=True)
+
+        with col_u2:
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>Modify User Role</div>", unsafe_allow_html=True)
+                user_list = [u["username"] for u in all_db_users]
+                mod_user = st.selectbox("Select User Account", user_list, key="mod_user_sel")
+                current_u_dict = next((u for u in all_db_users if u["username"] == mod_user), None)
+                current_u_role = current_u_dict["role"] if current_u_dict else "doctor"
+                new_role_val = st.selectbox(
+                    "Assign New Role",
+                    ["doctor", "patient", "admin"],
+                    index=["doctor", "patient", "admin"].index(current_u_role),
+                    key="new_role_sel"
+                )
+                if st.button("Update Role", key="btn_update_role", use_container_width=True):
+                    db.update_user_role(mod_user, new_role_val)
+                    db.log_activity(
+                        username=st.session_state.username,
+                        action="ROLE_UPDATE",
+                        role="admin",
+                        details=f"Admin changed role for @{mod_user} to '{new_role_val.title()}'",
+                        status="SUCCESS"
+                    )
+                    st.success(f"✓ Role for @{mod_user} updated to '{new_role_val.title()}' in database!")
+                    st.rerun()
+
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>👨‍⚕️ Provision Clinician / Doctor Account</div>", unsafe_allow_html=True)
+                new_adm_fn = st.text_input("Clinician Full Name", placeholder="e.g. Dr. Sarah Chen, M.D.", key="adm_new_fn")
+                c_au1, c_au2 = st.columns(2)
+                with c_au1:
+                    new_adm_u = st.text_input("Username", placeholder="e.g. dr_chen", key="adm_new_u")
+                with c_au2:
+                    new_adm_p = st.text_input("Password", type="password", placeholder="Enter password", key="adm_new_p")
+                new_adm_r = st.selectbox("Role Assignment", ["doctor", "admin"], key="adm_new_r")
+                if st.button("➕ Provision Clinician Account", key="btn_add_user_adm", use_container_width=True):
+                    clean_adm_u = new_adm_u.strip() if new_adm_u else ""
+                    if clean_adm_u and new_adm_p and new_adm_fn:
+                        uid, err = db.create_user(clean_adm_u, new_adm_p, new_adm_r, full_name=new_adm_fn.strip())
+                        if err:
+                            st.error(f"❌ {err}")
+                        else:
+                            db.log_activity(
+                                username=st.session_state.username,
+                                action="USER_CREATE",
+                                role="admin",
+                                details=f"Admin provisioned {new_adm_r.title()} account for '{new_adm_fn.strip()}' (@{clean_adm_u})",
+                                status="SUCCESS"
+                            )
+                            st.success(f"✓ Clinician @{clean_adm_u} ({new_adm_fn.strip()}) created successfully in database!")
+                            st.rerun()
+                    else:
+                        st.error("Please fill in Full Name, Username, and Password.")
+
+
+    with tab_activity:
+        act_logs = db.get_activity_logs(limit=100)
+        c_a_top1, c_a_top2 = st.columns([3, 1])
+        with c_a_top1:
+            st.markdown(f"<div class='pro-card-title'>📝 User Activity &amp; Login Audit Trail ({len(act_logs)} Total Recorded Events)</div>", unsafe_allow_html=True)
+        with c_a_top2:
+            if st.button("🗑️ Clear Activity Logs", key="btn_clear_act_logs", use_container_width=True):
+                db.clear_activity_logs()
+                st.success("Activity logs cleared!")
+                st.rerun()
+
+        if act_logs:
+            # Table Headers
+            ah1, ah2, ah3, ah4, ah5, ah6, ah7 = st.columns([0.6, 1.4, 1.2, 1.1, 2.8, 0.9, 1.4])
+            ah1.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>ID</span>", unsafe_allow_html=True)
+            ah2.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Action</span>", unsafe_allow_html=True)
+            ah3.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>User</span>", unsafe_allow_html=True)
+            ah4.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Role</span>", unsafe_allow_html=True)
+            ah5.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Activity Details</span>", unsafe_allow_html=True)
+            ah6.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Status</span>", unsafe_allow_html=True)
+            ah7.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Timestamp</span>", unsafe_allow_html=True)
+            st.markdown("<hr style='border:0; border-top:1px solid #21262D; margin:0.3rem 0 0.5rem 0;'>", unsafe_allow_html=True)
+
+            for act in act_logs:
+                action_name = act['action']
+                act_col = "#3FB950" if "LOGIN" in action_name or "REGISTER" in action_name else ("#00D4FF" if "SCAN" in action_name or "REPORT" in action_name else "#FF9500")
+                stat_col = "#3FB950" if act['status'] == "SUCCESS" else "#FF3B30"
+                r_val = act['role'].title() if act['role'] else "General"
+                
+                a1, a2, a3, a4, a5, a6, a7 = st.columns([0.6, 1.4, 1.2, 1.1, 2.8, 0.9, 1.4])
+                a1.markdown(f"<span style='font-family:monospace; color:#8B949E; font-size:0.75rem;'>#{act['id']}</span>", unsafe_allow_html=True)
+                a2.markdown(f"<span style='background:{act_col}18; color:{act_col}; border:1px solid {act_col}44; border-radius:99px; font-size:0.7rem; padding:1px 6px; font-weight:700;'>{action_name}</span>", unsafe_allow_html=True)
+                a3.markdown(f"<span style='font-size:0.8rem; font-weight:600; color:#E6EDF3;'>@{act['username']}</span>", unsafe_allow_html=True)
+                a4.markdown(f"<span style='font-size:0.75rem; color:#8B949E;'>{r_val}</span>", unsafe_allow_html=True)
+                a5.markdown(f"<span style='font-size:0.78rem; color:#E6EDF3; line-height:1.3;'>{act['details']}</span>", unsafe_allow_html=True)
+                a6.markdown(f"<span style='color:{stat_col}; font-size:0.72rem; font-weight:600;'>● {act['status']}</span>", unsafe_allow_html=True)
+                a7.markdown(f"<span style='font-family:monospace; font-size:0.72rem; color:#8B949E;'>{act['created_at']}</span>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-bottom:0.35rem;'></div>", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="background:#161B22; border:1px solid #21262D; border-radius:8px; padding:2rem; text-align:center;">
+                <span style="font-size:1.8rem; color:#8B949E;">📝</span>
+                <p style="color:#8B949E; font-size:0.85rem; margin-top:0.4rem;">No user activity recorded yet. User logins and system actions will be tracked here in real-time!</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with tab_reports:
+        all_reps = db.get_all_reports(limit=50)
+        st.markdown(f"<div class='pro-card-title'>📋 Stored Diagnostic Reports Archive ({len(all_reps)} Total Reports in Database)</div>", unsafe_allow_html=True)
+        
+        if all_reps:
+            # Header Row
+            rh1, rh2, rh3, rh4, rh5, rh6 = st.columns([1.6, 1.4, 1.2, 1.2, 1.2, 1.2])
+            rh1.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Report Code</span>", unsafe_allow_html=True)
+            rh2.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Patient</span>", unsafe_allow_html=True)
+            rh3.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Diagnosis</span>", unsafe_allow_html=True)
+            rh4.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Confidence</span>", unsafe_allow_html=True)
+            rh5.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Doctor</span>", unsafe_allow_html=True)
+            rh6.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>PDF Export</span>", unsafe_allow_html=True)
+            st.markdown("<hr style='border:0; border-top:1px solid #21262D; margin:0.3rem 0 0.6rem 0;'>", unsafe_allow_html=True)
+
+            for r in all_reps:
+                r_c = "#34C759" if r["predicted_class"] == "notumor" else ("#FF9500" if r["predicted_class"] in ["meningioma", "pituitary"] else "#FF3B30")
+                
+                c1, c2, c3, c4, c5, c6 = st.columns([1.6, 1.4, 1.2, 1.2, 1.2, 1.2])
+                c1.markdown(f"<span style='font-family:monospace; font-weight:700; color:#00D4FF; font-size:0.8rem;'>{r['report_code']}</span>", unsafe_allow_html=True)
+                c2.markdown(f"<span style='font-size:0.82rem; color:#E6EDF3;'><b>{r['patient_name']}</b><br/><span style='color:#8B949E; font-size:0.72rem;'>{r['patient_age']}y · {r['patient_gender']}</span></span>", unsafe_allow_html=True)
+                c3.markdown(f"<span style='background:{r_c}18; color:{r_c}; border:1px solid {r_c}44; border-radius:99px; font-size:0.72rem; padding:2px 8px; font-weight:600;'>{r['predicted_class'].title()}</span>", unsafe_allow_html=True)
+                c4.markdown(f"<span style='font-size:0.82rem; color:#E6EDF3; font-weight:600;'>{r['confidence']:.1f}%</span>", unsafe_allow_html=True)
+                c5.markdown(f"<span style='font-size:0.8rem; color:#8B949E;'>@{r['doctor_username']}</span>", unsafe_allow_html=True)
+                with c6:
+                    pdf_blob, pdf_fn = db.get_report_pdf_blob(r["id"])
+                    if pdf_blob:
+                        st.download_button(
+                            label="📥 PDF",
+                            data=pdf_blob,
+                            file_name=pdf_fn or f"{r['report_code']}.pdf",
+                            mime="application/pdf",
+                            key=f"dl_rep_{r['id']}",
+                            use_container_width=True
+                        )
+                    else:
+                        st.markdown("<span style='font-size:0.72rem; color:#8B949E;'>N/A</span>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-bottom:0.4rem;'></div>", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="background:#161B22; border:1px solid #21262D; border-radius:8px; padding:2rem; text-align:center;">
+                <span style="font-size:1.8rem; color:#8B949E;">📄</span>
+                <p style="color:#8B949E; font-size:0.85rem; margin-top:0.4rem;">No diagnostic reports stored in database yet. Run an MRI scan to generate and save reports automatically!</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with tab_sys:
+
+        d_c1, d_c2 = st.columns(2, gap="large")
+        with d_c1:
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>PyTorch &amp; Hardware Runtime</div>", unsafe_allow_html=True)
+                gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A (CPU Mode)'
+                st.markdown(f"""
+                <div style="font-size:0.84rem; line-height:1.9; color:#E6EDF3;">
+                    • <b>PyTorch Version:</b> <code style="color:#00D4FF;">{torch.__version__}</code><br/>
+                    • <b>CUDA Available:</b> <code style="color:#3FB950;">{torch.cuda.is_available()}</code><br/>
+                    • <b>Active Compute Device:</b> <code style="color:#00D4FF;">{DEVICE}</code><br/>
+                    • <b>GPU Device Name:</b> <code>{gpu_name}</code><br/>
+                    • <b>CUDA Device Count:</b> <code>{torch.cuda.device_count()}</code><br/>
+                    • <b>Database Backend:</b> <code style="color:#3FB950;">{db.get_active_engine_name()}</code><br/>
+                    • <b>ReportLab PDF Engine:</b> <code>{'Online' if REPORTLAB_AVAILABLE else 'Missing'}</code>
+                </div>
+                """, unsafe_allow_html=True)
+
+
+        with d_c2:
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>Model Checkpoint Weights Verification</div>", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style="font-size:0.84rem; line-height:1.9; color:#E6EDF3;">
+                    • <b>Classifier Model:</b> <code style="color:#3FB950;">{'Found' if os.path.exists(MODEL_PATH) else 'Missing'}</code><br/>
+                    • <b>Segmentation Model:</b> <code style="color:#3FB950;">{'Found' if os.path.exists(SEG_MODEL_PATH) else 'Missing'}</code><br/>
+                    • <b>Guardrail Model:</b> <code style="color:#3FB950;">{'Found' if os.path.exists(GUARDRAIL_MODEL_PATH) else 'Missing'}</code><br/>
+                    • <b>Classification Metrics:</b> <code style="color:#3FB950;">{'Loaded' if os.path.exists(METRICS_PATH) else 'Missing'}</code><br/>
+                    • <b>Segmentation Metrics:</b> <code style="color:#3FB950;">{'Loaded' if os.path.exists(SEG_METRICS_PATH) else 'Missing'}</code>
+                </div>
+                """, unsafe_allow_html=True)
+
+    with tab_models:
+        m_c1, m_c2 = st.columns(2, gap="large")
+        with m_c1:
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>4-Class Classifier Evaluation Metrics</div>", unsafe_allow_html=True)
+                metrics = load_metrics()
+                if metrics and "test_performance" in metrics:
+                    tp = metrics["test_performance"]
+                    st.markdown(f"""
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.8rem; background:rgba(0,212,255,0.08); padding:0.6rem 0.8rem; border-radius:6px; border:1px solid rgba(0,212,255,0.2);">
+                        <span style="font-size:0.82rem; color:#E6EDF3;"><b>Overall Test Accuracy:</b> <span style="color:#00D4FF; font-weight:700;">{tp.get('accuracy', 0)*100:.2f}%</span></span>
+                        <span style="font-size:0.82rem; color:#8B949E;">Training Time: <b>{metrics.get('total_training_time_minutes', 0):.1f} min</b></span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # Performance Table Headers
+                    ch1, ch2, ch3, ch4, ch5 = st.columns([1.5, 1, 1, 1, 1])
+                    ch1.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Pathology Class</span>", unsafe_allow_html=True)
+                    ch2.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Precision</span>", unsafe_allow_html=True)
+                    ch3.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Recall</span>", unsafe_allow_html=True)
+                    ch4.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>F1-Score</span>", unsafe_allow_html=True)
+                    ch5.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Support</span>", unsafe_allow_html=True)
+                    st.markdown("<hr style='border:0; border-top:1px solid #21262D; margin:0.3rem 0 0.5rem 0;'>", unsafe_allow_html=True)
+
+                    classes_list = ["glioma", "meningioma", "pituitary", "notumor"]
+                    for c_name in classes_list:
+                        if c_name in tp:
+                            c_data = tp[c_name]
+                            badge_col = "#FF3B30" if c_name == "glioma" else ("#FF9500" if c_name in ["meningioma", "pituitary"] else "#34C759")
+                            
+                            c1, c2, c3, c4, c5 = st.columns([1.5, 1, 1, 1, 1])
+                            c1.markdown(f"<span style='background:{badge_col}18; color:{badge_col}; border:1px solid {badge_col}44; border-radius:99px; font-size:0.72rem; padding:2px 8px; font-weight:600;'>{c_name.title()}</span>", unsafe_allow_html=True)
+                            c2.markdown(f"<span style='font-size:0.82rem; color:#E6EDF3;'>{c_data['precision']*100:.1f}%</span>", unsafe_allow_html=True)
+                            c3.markdown(f"<span style='font-size:0.82rem; color:#E6EDF3;'>{c_data['recall']*100:.1f}%</span>", unsafe_allow_html=True)
+                            c4.markdown(f"<span style='font-size:0.82rem; color:#00D4FF; font-weight:600;'>{c_data['f1-score']*100:.1f}%</span>", unsafe_allow_html=True)
+                            c5.markdown(f"<span style='font-size:0.82rem; color:#8B949E;'>{int(c_data['support'])}</span>", unsafe_allow_html=True)
+                            st.markdown("<div style='margin-bottom:0.35rem;'></div>", unsafe_allow_html=True)
+
+                    if "macro avg" in tp:
+                        st.markdown("<hr style='border:0; border-top:1px solid #30363D; margin:0.4rem 0;'>", unsafe_allow_html=True)
+                        m_data = tp["macro avg"]
+                        m1, m2, m3, m4, m5 = st.columns([1.5, 1, 1, 1, 1])
+                        m1.markdown("<span style='font-size:0.78rem; font-weight:700; color:#E6EDF3;'>Macro Average</span>", unsafe_allow_html=True)
+                        m2.markdown(f"<span style='font-size:0.82rem; color:#E6EDF3;'>{m_data['precision']*100:.1f}%</span>", unsafe_allow_html=True)
+                        m3.markdown(f"<span style='font-size:0.82rem; color:#E6EDF3;'>{m_data['recall']*100:.1f}%</span>", unsafe_allow_html=True)
+                        m4.markdown(f"<span style='font-size:0.82rem; color:#00D4FF; font-weight:700;'>{m_data['f1-score']*100:.1f}%</span>", unsafe_allow_html=True)
+                        m5.markdown(f"<span style='font-size:0.82rem; color:#8B949E;'>{int(m_data['support'])}</span>", unsafe_allow_html=True)
+                else:
+                    st.info("No classifier metrics found.")
+
+        with m_c2:
+            with st.container(border=True):
+                st.markdown("<div class='pro-card-title'>U-Net Segmentation Evaluation Metrics</div>", unsafe_allow_html=True)
+                seg_metrics = load_seg_metrics()
+                if seg_metrics and "test_performance" in seg_metrics:
+                    stp = seg_metrics["test_performance"]
+                    cfg = seg_metrics.get("config", {})
+                    
+                    st.markdown(f"""
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.8rem; background:rgba(63,185,80,0.08); padding:0.6rem 0.8rem; border-radius:6px; border:1px solid rgba(63,185,80,0.2);">
+                        <span style="font-size:0.82rem; color:#E6EDF3;"><b>Test Dice Score:</b> <span style="color:#3FB950; font-weight:700;">{stp.get('dice', 0)*100:.2f}%</span></span>
+                        <span style="font-size:0.82rem; color:#8B949E;">Test IoU (Jaccard): <b style="color:#3FB950;">{stp.get('iou', 0)*100:.2f}%</b></span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # Segmentation Specs Table
+                    sh1, sh2 = st.columns([1.4, 1.6])
+                    sh1.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Metric / Parameter</span>", unsafe_allow_html=True)
+                    sh2.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Evaluation Result</span>", unsafe_allow_html=True)
+                    st.markdown("<hr style='border:0; border-top:1px solid #21262D; margin:0.3rem 0 0.5rem 0;'>", unsafe_allow_html=True)
+
+                    seg_rows = [
+                        ("Dice Similarity Coefficient (Test)", f"{stp.get('dice', 0)*100:.2f}%", "#3FB950"),
+                        ("Intersection-over-Union (IoU Test)", f"{stp.get('iou', 0)*100:.2f}%", "#3FB950"),
+                        ("Best Validation Dice Score", f"{seg_metrics.get('best_val_dice', 0)*100:.2f}%", "#00D4FF"),
+                        ("Test Loss (BCE + Dice Combined)", f"{stp.get('loss', 0):.4f}", "#E6EDF3"),
+                        ("Segmentation Architecture", f"{cfg.get('architecture', 'U-Net')}", "#E6EDF3"),
+                        ("Encoder Backbone Network", f"{cfg.get('encoder', 'efficientnet-b0')}", "#00D4FF"),
+                        ("Input Image Resolution", f"{cfg.get('img_size', 256)} x {cfg.get('img_size', 256)} px", "#E6EDF3"),
+                        ("Training Epochs / Duration", f"{cfg.get('epochs', 25)} epochs ({seg_metrics.get('total_training_time_minutes', 0):.1f} min)", "#8B949E"),
+                    ]
+
+                    for param_name, param_val, val_color in seg_rows:
+                        s1, s2 = st.columns([1.4, 1.6])
+                        s1.markdown(f"<span style='font-size:0.8rem; color:#E6EDF3;'>{param_name}</span>", unsafe_allow_html=True)
+                        s2.markdown(f"<span style='font-size:0.8rem; font-weight:600; color:{val_color};'>{param_val}</span>", unsafe_allow_html=True)
+                        st.markdown("<div style='margin-bottom:0.3rem;'></div>", unsafe_allow_html=True)
+                else:
+                    st.info("No segmentation metrics found.")
+
+    with tab_errors:
+        err_logs = db.get_error_logs(limit=100)
+        c_e_top1, c_e_top2 = st.columns([3, 1])
+        with c_e_top1:
+            st.markdown(f"<div class='pro-card-title'>🚨 System &amp; Guardrail Error Logs Table ({len(err_logs)} total events)</div>", unsafe_allow_html=True)
+        with c_e_top2:
+            if st.button("🗑️ Clear Error Logs", key="btn_clear_logs", use_container_width=True):
+                db.clear_error_logs()
+                st.success("Error logs cleared!")
+                st.rerun()
+
+        if err_logs:
+            # Table Headers
+            eh1, eh2, eh3, eh4, eh5, eh6, eh7 = st.columns([0.6, 1.2, 1.4, 1.1, 1.1, 2.6, 1.4])
+            eh1.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>ID</span>", unsafe_allow_html=True)
+            eh2.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Severity</span>", unsafe_allow_html=True)
+            eh3.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Error Type</span>", unsafe_allow_html=True)
+            eh4.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Module</span>", unsafe_allow_html=True)
+            eh5.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>User</span>", unsafe_allow_html=True)
+            eh6.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Message / Details</span>", unsafe_allow_html=True)
+            eh7.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Timestamp</span>", unsafe_allow_html=True)
+            st.markdown("<hr style='border:0; border-top:1px solid #21262D; margin:0.3rem 0 0.5rem 0;'>", unsafe_allow_html=True)
+
+            for elog in err_logs:
+                sev = elog['error_severity']
+                sev_color = "#FF3B30" if sev == "CRITICAL" else ("#FF9500" if sev == "ERROR" else "#FFCC00")
+                user_val = f"@{elog['username']}" if elog['username'] else "System"
+                
+                e1, e2, e3, e4, e5, e6, e7 = st.columns([0.6, 1.2, 1.4, 1.1, 1.1, 2.6, 1.4])
+                e1.markdown(f"<span style='font-family:monospace; color:#8B949E; font-size:0.75rem;'>#{elog['id']}</span>", unsafe_allow_html=True)
+                e2.markdown(f"<span style='background:{sev_color}18; color:{sev_color}; border:1px solid {sev_color}44; border-radius:99px; font-size:0.7rem; padding:1px 6px; font-weight:700;'>{sev}</span>", unsafe_allow_html=True)
+                e3.markdown(f"<span style='font-family:monospace; font-size:0.75rem; color:#E6EDF3; font-weight:600;'>{elog['error_type']}</span>", unsafe_allow_html=True)
+                e4.markdown(f"<span style='font-size:0.75rem; color:#8B949E;'>{elog['component']}</span>", unsafe_allow_html=True)
+                e5.markdown(f"<span style='font-size:0.75rem; color:#00D4FF;'>{user_val}</span>", unsafe_allow_html=True)
+                e6.markdown(f"<span style='font-size:0.78rem; color:#E6EDF3; line-height:1.3;'>{elog['error_message']}</span>", unsafe_allow_html=True)
+                e7.markdown(f"<span style='font-family:monospace; font-size:0.72rem; color:#8B949E;'>{elog['created_at']}</span>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-bottom:0.35rem;'></div>", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="background:#161B22; border:1px solid #21262D; border-radius:8px; padding:2rem; text-align:center;">
+                <span style="font-size:1.8rem; color:#3FB950;">✓</span>
+                <p style="color:#8B949E; font-size:0.85rem; margin-top:0.4rem;">No system errors or guardrail rejections logged. Pipeline is healthy!</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+
+    st.markdown("<div style='margin-top:1.5rem;'></div>", unsafe_allow_html=True)
+    b_col1, b_col2, b_col3 = st.columns([1.2, 1.2, 1.2])
+    with b_col1:
+        if st.button("🚀 Launch Doctor Workstation", key="adm_launch_doc", use_container_width=True):
+            st.session_state.role = "doctor"
+            st.rerun()
+    with b_col2:
+        if st.button("👤 Launch Patient Portal", key="adm_launch_pat", use_container_width=True):
+            st.session_state.role = "patient"
+            st.rerun()
+    with b_col3:
+        if st.button("🔓 Logout", key="adm_logout_btn", use_container_width=True):
+            db.log_activity(
+                username=st.session_state.username or "admin",
+                action="USER_LOGOUT",
+                role="admin",
+                details="Admin signed out of session",
+                status="SUCCESS"
+            )
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.session_state.page = "landing"
+            st.rerun()
+
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2115,7 +3419,14 @@ elif st.session_state.page == "login":
 
 else:  # "dashboard"
     if st.session_state.logged_in:
-        render_dashboard_page()
+        current_role = st.session_state.get("role", "doctor")
+        if current_role == "admin":
+            render_admin_dashboard()
+        elif current_role == "patient":
+            render_patient_dashboard()
+        else:
+            render_dashboard_page()
     else:
         st.session_state.page = "login"
         st.rerun()
+
