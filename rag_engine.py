@@ -116,7 +116,17 @@ def init_rag_engine():
 
     if EMBEDDINGS_AVAILABLE:
         try:
-            _EMBEDDING_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+            # Attempt offline-first loading from local cache to eliminate DNS/network errors and retry pauses
+            try:
+                os.environ["HF_HUB_OFFLINE"] = "1"
+                os.environ["TRANSFORMERS_OFFLINE"] = "1"
+                _EMBEDDING_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+            except Exception:
+                # If not in cache, fallback to online download
+                os.environ.pop("HF_HUB_OFFLINE", None)
+                os.environ.pop("TRANSFORMERS_OFFLINE", None)
+                _EMBEDDING_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+
             texts = [c["text"] for c in _KNOWLEDGE_CHUNKS]
             embeddings = _EMBEDDING_MODEL.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
             
@@ -126,6 +136,7 @@ def init_rag_engine():
             print(f"[RAG] Indexed {len(_KNOWLEDGE_CHUNKS)} clinical chunks into FAISS vector store.")
         except Exception as e:
             print(f"[RAG] Vector index fallback active: {e}")
+
 
 
 def retrieve_relevant_chunks(query: str, top_k: int = 3) -> List[Dict[str, Any]]:

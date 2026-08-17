@@ -31,3 +31,8 @@ python-dotenv>=1.0.0
 sentence-transformers>=2.2.0
 faiss-cpu>=1.7.4
 groq>=0.9.0
+
+# 3D Medical Imaging (NIfTI) & Segmentation
+nibabel>=5.0.0
+segmentation-models-pytorch>=0.3.3
+
