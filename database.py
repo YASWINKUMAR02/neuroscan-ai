@@ -15,6 +15,9 @@ import json
 import os
 import datetime
 import traceback
+import re
+import bcrypt
+import sqlite3
 
 # MySQL Configuration
 MYSQL_HOST = "localhost"
@@ -36,8 +39,6 @@ try:
 except ImportError:
     PYMYSQL_AVAILABLE = False
     USE_MYSQL = False
-
-import sqlite3
 
 
 def get_db_connection():
@@ -66,10 +67,156 @@ def get_db_connection():
     return conn, "sqlite"
 
 
+# Password Policy Configuration
+MIN_PASSWORD_LENGTH = 8
+COMMON_WEAK_PASSWORDS = {
+    "password", "password123", "password1234", "123456", "12345678", "123456789",
+    "12345", "qwerty", "qwertyuiop", "admin", "admin123", "administrator",
+    "doctor", "patient", "welcome", "welcome1", "neuroscan", "neuro2025",
+    "brain123", "patient123", "hospital", "medical", "clinic123", "iloveyou",
+    "secret", "pass123", "letmein", "default"
+}
+
+
+def validate_password_policy(password: str, username: str = "", full_name: str = "") -> tuple[bool, list[str]]:
+    """
+    Validates a password against clinical security & complexity policies:
+    1. Minimum 8 characters
+    2. At least 1 uppercase letter (A-Z)
+    3. At least 1 lowercase letter (a-z)
+    4. At least 1 numeric digit (0-9)
+    5. At least 1 special character (!@#$%^&*...)
+    6. Not in common weak passwords dictionary
+    7. Does not contain username or full name substrings
+    
+    Returns:
+        (is_valid: bool, issues: list[str])
+    """
+    issues = []
+
+    if not password:
+        return False, ["Password cannot be empty."]
+
+    if len(password) < MIN_PASSWORD_LENGTH:
+        issues.append(f"Password must be at least {MIN_PASSWORD_LENGTH} characters long (currently {len(password)}).")
+
+    if not re.search(r"[A-Z]", password):
+        issues.append("Password must contain at least one uppercase letter (A-Z).")
+
+    if not re.search(r"[a-z]", password):
+        issues.append("Password must contain at least one lowercase letter (a-z).")
+
+    if not re.search(r"\d", password):
+        issues.append("Password must contain at least one numeric digit (0-9).")
+
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>_+\-=[\]/\\;`~]", password):
+        issues.append("Password must contain at least one special character (!@#$%^&*...).")
+
+    # Weak password blacklist check
+    pwd_clean = password.lower().strip()
+    if pwd_clean in COMMON_WEAK_PASSWORDS:
+        issues.append("Password is too common or easily guessable. Please choose a stronger passphrase.")
+
+    # Check if username is contained inside password
+    if username and len(username) >= 3 and username.lower() in pwd_clean:
+        issues.append("Password must not contain your username.")
+
+    # Check if name is contained inside password
+    if full_name:
+        for part in full_name.lower().split():
+            if len(part) >= 4 and part in pwd_clean:
+                issues.append("Password must not contain parts of your name.")
+                break
+
+    return (len(issues) == 0, issues)
+
+
 def hash_password(password: str) -> str:
-    """Hash a password using SHA-256 with a secure salt."""
-    salt = "neuroscan_ai_secure_salt_2026"
-    return hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
+    """
+    Securely hash a password using bcrypt with a cryptographic salt (work factor 12).
+    Falls back to Argon2 or PBKDF2-HMAC-SHA256 if bcrypt is unavailable.
+    """
+    if not isinstance(password, str):
+        password = str(password)
+
+    # Primary: bcrypt
+    try:
+        salt = bcrypt.gensalt(rounds=12)
+        hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+        return hashed.decode("utf-8")
+    except Exception:
+        pass
+
+    # Secondary: Argon2
+    try:
+        from argon2 import PasswordHasher
+        ph = PasswordHasher()
+        return ph.hash(password)
+    except Exception:
+        pass
+
+    # Tertiary Fallback: PBKDF2-HMAC-SHA256 (600,000 iterations)
+    salt_bytes = os.urandom(16)
+    kdf = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt_bytes, 600000)
+    return f"pbkdf2_sha256$600000${salt_bytes.hex()}${kdf.hex()}"
+
+
+def verify_password(plain_password: str, hashed_password: str) -> tuple[bool, bool]:
+    """
+    Verifies a plaintext password against a stored hash.
+    Supports bcrypt ($2b$, $2a$), Argon2 ($argon2id$), PBKDF2, and legacy salted SHA-256.
+    
+    Returns:
+        (is_valid: bool, needs_rehash: bool)
+    """
+    if not plain_password or not hashed_password:
+        return False, False
+
+    if not isinstance(plain_password, str):
+        plain_password = str(plain_password)
+
+    # 1. Bcrypt verification
+    if hashed_password.startswith(("$2b$", "$2a$", "$2y$")):
+        try:
+            valid = bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+            return valid, False
+        except Exception:
+            return False, False
+
+    # 2. Argon2 verification
+    if hashed_password.startswith("$argon2"):
+        try:
+            from argon2 import PasswordHasher
+            ph = PasswordHasher()
+            ph.verify(hashed_password, plain_password)
+            return True, False
+        except Exception:
+            return False, False
+
+    # 3. PBKDF2 verification
+    if hashed_password.startswith("pbkdf2_sha256$"):
+        try:
+            parts = hashed_password.split("$")
+            iterations = int(parts[1])
+            salt_bytes = bytes.fromhex(parts[2])
+            expected_hash = parts[3]
+            computed = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt_bytes, iterations).hex()
+            return computed == expected_hash, False
+        except Exception:
+            return False, False
+
+    # 4. Legacy SHA-256 fallback (Salt: neuroscan_ai_secure_salt_2026)
+    legacy_salt = "neuroscan_ai_secure_salt_2026"
+    legacy_hash = hashlib.sha256((plain_password + legacy_salt).encode("utf-8")).hexdigest()
+    if legacy_hash == hashed_password:
+        # Valid legacy hash; flag for automatic upgrade/rehash to bcrypt
+        return True, True
+
+    # 5. Direct plaintext check (in case unhashed legacy strings exist)
+    if plain_password == hashed_password:
+        return True, True
+
+    return False, False
 
 
 def init_db():
@@ -359,32 +506,79 @@ def get_active_engine_name():
 # ── User & Authentication Operations ─────────────────────────────────────────
 
 def authenticate_user(username: str, password: str):
-    """Authenticate user against MySQL / SQLite."""
+    """
+    Authenticate user against MySQL / SQLite using secure bcrypt / Argon2 verification.
+    Transparently upgrades legacy SHA-256 hashes to bcrypt upon successful authentication.
+    """
+    clean_u = username.strip() if username else ""
+    if not clean_u or not password:
+        return None
+
     conn, engine = get_db_connection()
-    pwd_h = hash_password(password)
-    sql = "SELECT id, username, role, full_name, created_at FROM users WHERE username = %s AND password_hash = %s" if engine == "mysql" else \
-          "SELECT id, username, role, full_name, created_at FROM users WHERE username = ? AND password_hash = ?"
+    sql = "SELECT id, username, password_hash, role, full_name, created_at FROM users WHERE username = %s" if engine == "mysql" else \
+          "SELECT id, username, password_hash, role, full_name, created_at FROM users WHERE username = ?"
     
+    user_row = None
     if engine == "mysql":
         with conn.cursor() as cur:
-            cur.execute(sql, (username, pwd_h))
-            row = cur.fetchone()
-        conn.close()
-        return row
+            cur.execute(sql, (clean_u,))
+            user_row = cur.fetchone()
     else:
         cur = conn.cursor()
-        cur.execute(sql, (username, pwd_h))
+        cur.execute(sql, (clean_u,))
         row = cur.fetchone()
+        user_row = dict(row) if row else None
+
+    if not user_row:
         conn.close()
-        return dict(row) if row else None
+        return None
+
+    stored_hash = user_row.get("password_hash", "")
+    is_valid, needs_rehash = verify_password(password, stored_hash)
+
+    if is_valid:
+        # Transparently upgrade legacy SHA-256 or unhashed records to secure bcrypt in database
+        if needs_rehash:
+            try:
+                new_bcrypt_hash = hash_password(password)
+                update_sql = "UPDATE users SET password_hash = %s WHERE id = %s" if engine == "mysql" else \
+                             "UPDATE users SET password_hash = ? WHERE id = ?"
+                if engine == "mysql":
+                    with conn.cursor() as cur:
+                        cur.execute(update_sql, (new_bcrypt_hash, user_row["id"]))
+                else:
+                    cur = conn.cursor()
+                    cur.execute(update_sql, (new_bcrypt_hash, user_row["id"]))
+                    conn.commit()
+            except Exception:
+                pass
+        conn.close()
+        # Pop hash from memory for security
+        user_row.pop("password_hash", None)
+        return user_row
+
+    conn.close()
+    return None
 
 
-def create_user(username: str, password: str, role: str, full_name: str = ""):
-    """Register a new user account in database."""
+def create_user(username: str, password: str, role: str, full_name: str = "", enforce_policy: bool = False):
+    """
+    Register a new user account in database with salted bcrypt hashing.
+    Optionally enforces clinical password complexity policy.
+    """
+    clean_u = username.strip() if username else ""
+    if not clean_u or not password:
+        return None, "Username and password cannot be empty."
+
+    if enforce_policy:
+        is_valid, issues = validate_password_policy(password, username=clean_u, full_name=full_name)
+        if not is_valid:
+            return None, " ".join(issues)
+
     conn, engine = get_db_connection()
     sql = "INSERT INTO users (username, password_hash, role, full_name) VALUES (%s, %s, %s, %s)" if engine == "mysql" else \
           "INSERT INTO users (username, password_hash, role, full_name) VALUES (?, ?, ?, ?)"
-    params = (username, hash_password(password), role, full_name or username.title())
+    params = (clean_u, hash_password(password), role, full_name.strip() or clean_u.title())
 
     try:
         if engine == "mysql":
@@ -520,12 +714,16 @@ def get_all_patients():
 
 
 def create_patient_account(username: str, password: str, full_name: str, age: int, gender: str, doctor_username: str = ""):
-    """Doctor provisions a new Patient account and demographic profile."""
+    """Doctor provisions a new Patient account and demographic profile with password policy validation."""
     clean_u = username.strip() if username else ""
     if not clean_u or not password or not full_name or not full_name.strip():
         return None, "All fields (Username, Password, Full Name, Age, Gender) are required."
 
-    user_id, err = create_user(clean_u, password, "patient", full_name.strip())
+    is_valid, issues = validate_password_policy(password, username=clean_u, full_name=full_name.strip())
+    if not is_valid:
+        return None, " ".join(issues)
+
+    user_id, err = create_user(clean_u, password, "patient", full_name.strip(), enforce_policy=False)
     if err:
         return None, err
 

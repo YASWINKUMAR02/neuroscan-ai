@@ -593,20 +593,43 @@ div[data-testid="stFileUploader"] {
     box-shadow: 0 0 0 2px rgba(0,212,255,0.15) !important;
 }
 
-/* ── st.button & st.download_button overrides ── */
-.stButton > button, .stDownloadButton > button {
-    background: linear-gradient(135deg, #00D4FF, #0099BB) !important;
+/* ── st.button & st.download_button styling ── */
+.stButton > button {
+    background: #161B22 !important;
+    background-color: #161B22 !important;
+    color: #E6EDF3 !important;
+    border: 1px solid #30363D !important;
+    border-radius: 8px !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    padding: 0.5rem 1rem !important;
+    transition: all 0.2s ease !important;
+}
+.stButton > button:hover {
+    background: #21262D !important;
+    border-color: #00D4FF !important;
+    color: #00D4FF !important;
+    box-shadow: 0 4px 14px rgba(0, 212, 255, 0.15) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Primary buttons & Downloads */
+.stDownloadButton > button,
+button[kind="primary"],
+div[data-testid="stFormSubmitButton"] > button {
+    background: linear-gradient(135deg, #00D4FF 0%, #0099BB 100%) !important;
     color: #0D1117 !important;
     font-family: 'Outfit', sans-serif !important;
     font-weight: 700 !important;
     border: none !important;
     border-radius: 8px !important;
-    padding: 0.55rem 1.5rem !important;
-    transition: all 0.2s ease !important;
-    width: 100%;
+    box-shadow: 0 4px 16px rgba(0, 212, 255, 0.25) !important;
 }
-.stButton > button:hover, .stDownloadButton > button:hover {
-    box-shadow: 0 4px 16px rgba(0,212,255,0.35) !important;
+.stDownloadButton > button:hover,
+button[kind="primary"]:hover,
+div[data-testid="stFormSubmitButton"] > button:hover {
+    box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4) !important;
     transform: translateY(-1px) !important;
 }
 
@@ -1970,213 +1993,409 @@ Get started
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_login_page():
-    """Renders sleek modern clinical login UI with properly scaled typography, responsive card width, and robust authentication."""
+    """Renders clean, high-precision clinical login UI with ECG heartbeat line matching the exact user reference design."""
+    if st.session_state.get("logged_in", False):
+        st.session_state.page = "dashboard"
+        st.rerun()
+
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-    /* Global page layout constraint for login page */
+    /* Global clean white page styling for login view */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
-        background-color: #F8FAFC !important;
-        color: #0F172A !important;
+        background-color: #FFFFFF !important;
+        background-image: none !important;
+        color: #111827 !important;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
 
     .block-container {
-        max-width: 520px !important;
-        padding-top: 2.5rem !important;
+        max-width: 440px !important;
+        padding-top: 3.5rem !important;
         padding-bottom: 3.5rem !important;
         padding-left: 1.25rem !important;
         padding-right: 1.25rem !important;
         margin: 0 auto !important;
     }
 
-    /* All buttons on login page: Premium black pill/rounded-lg buttons */
-    .stApp button,
-    [data-testid="stAppViewContainer"] button,
-    .stButton > button,
-    button[kind="primary"],
-    button[kind="secondary"],
-    button[kind="secondaryFormSubmit"],
-    div[data-testid="stFormSubmitButton"] button {
-        background: #0F172A !important;
-        background-color: #0F172A !important;
-        color: #FFFFFF !important;
-        border: 1px solid #1E293B !important;
-        border-radius: 9px !important;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1) !important;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        font-size: 14px !important;
-        font-weight: 600 !important;
-        height: 42px !important;
-        min-height: 42px !important;
-        transition: all 0.15s ease !important;
-        cursor: pointer !important;
-    }
-    .stApp button:hover, [data-testid="stAppViewContainer"] button:hover {
-        background: #1E293B !important;
-        border-color: #334155 !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15) !important;
-    }
-    .stApp button:active {
-        transform: translateY(0px) !important;
+    /* Container Border Reset */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
     }
 
-    /* Input fields: Clean white background with crisp typography */
-    div[data-testid="stTextInput"] input,
+    /* Top ECG Waveform Line */
+    .ecg-line-wrapper {
+        margin-bottom: 1.2rem;
+    }
+
+    .login-heading-title {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 30px;
+        font-weight: 700;
+        color: #111827 !important;
+        margin: 0 0 8px 0;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+    }
+
+    .login-heading-sub {
+        font-size: 14.5px;
+        color: #4B5563 !important;
+        margin: 0 0 1.5rem 0;
+        line-height: 1.55;
+        font-weight: 400;
+    }
+
+    /* Input Field Labels: Monospace uppercase */
+    div[data-testid="stTextInput"] label,
+    div[data-testid="stTextInput"] label p {
+        color: #374151 !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-weight: 600 !important;
+        font-size: 11.5px !important;
+        letter-spacing: 0.1em !important;
+        text-transform: uppercase !important;
+        margin-bottom: 6px !important;
+    }
+
+    /* Reset text input outer widget wrapper */
+    div[data-testid*="stTextInput"] {
+        background: transparent !important;
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        height: auto !important;
+    }
+
+    /* BaseWeb Input Container & Wrappers: Crisp White with Gray Border */
+    div[data-testid*="stTextInput"] [data-baseweb="base-input"],
+    div[data-testid*="stTextInput"] [data-baseweb="input"],
+    div[data-baseweb="input"],
+    div[data-baseweb="base-input"] {
+        background: #FFFFFF !important;
+        background-color: #FFFFFF !important;
+        border: 1px solid #D1D5DB !important;
+        border-radius: 8px !important;
+        height: 46px !important;
+        min-height: 46px !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+    }
+    div[data-testid*="stTextInput"] [data-baseweb="input"]:focus-within,
+    div[data-baseweb="input"]:focus-within {
+        border-color: #166534 !important;
+        box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.12) !important;
+    }
+
+    /* Text Input element inside BaseWeb */
+    div[data-testid*="stTextInput"] input,
     [data-testid="stTextInput"] input,
     input[type="text"],
     input[type="password"] {
         background: #FFFFFF !important;
         background-color: #FFFFFF !important;
-        color: #0F172A !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 9px !important;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-family: 'Inter', sans-serif !important;
         font-size: 14.5px !important;
         height: 44px !important;
         padding: 0 14px !important;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+        box-shadow: none !important;
     }
-    div[data-testid="stTextInput"] input:focus {
+    div[data-testid*="stTextInput"] input::placeholder,
+    input::placeholder {
+        color: #9CA3AF !important;
+        -webkit-text-fill-color: #9CA3AF !important;
+    }
+    div[data-testid*="stTextInput"] input:focus {
         outline: none !important;
-        border-color: #0F6E56 !important;
-        box-shadow: 0 0 0 3px rgba(15, 110, 86, 0.15) !important;
+        border: none !important;
+        box-shadow: none !important;
     }
 
-    /* Input field labels */
-    div[data-testid="stTextInput"] label,
-    div[data-testid="stTextInput"] label p {
-        color: #1E293B !important;
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 600 !important;
-        font-size: 13.5px !important;
-        margin-bottom: 4px !important;
+    /* Password Eye Visibility Toggle Button */
+    div[data-testid*="stTextInput"] button,
+    div[data-testid*="stTextInput"] [data-baseweb="input"] button,
+    div[data-baseweb="input"] button {
+        background: #FFFFFF !important;
+        background-color: #FFFFFF !important;
+        border: none !important;
+        box-shadow: none !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        width: 44px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    div[data-testid*="stTextInput"] button svg,
+    div[data-testid*="stTextInput"] [data-baseweb="input"] button svg,
+    div[data-baseweb="input"] button svg {
+        fill: #6B7280 !important;
+        color: #6B7280 !important;
+        stroke: #6B7280 !important;
+        width: 18px !important;
+        height: 18px !important;
+        transition: fill 0.15s ease, color 0.15s ease !important;
+    }
+    div[data-testid*="stTextInput"] button:hover svg,
+    div[data-testid*="stTextInput"] [data-baseweb="input"] button:hover svg,
+    div[data-baseweb="input"] button:hover svg {
+        fill: #111827 !important;
+        color: #111827 !important;
+        stroke: #111827 !important;
     }
 
-    /* Form Submit Button override */
+    /* Utility Row (Stay signed in / Forgot password) */
+    .login-utility-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 10px 0 14px 0;
+        font-size: 12.5px;
+    }
+    .stay-signed-text {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: #374151;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .forgot-pwd-link {
+        color: #0F766E;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 500;
+    }
+
+    /* Password Policy Box: Clean light medical card */
+    .pwd-policy-container {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin: 6px 0 14px 0;
+        font-family: 'Inter', sans-serif;
+    }
+    .pwd-policy-header {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        color: #166534;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .pwd-policy-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 10px;
+        font-size: 12px;
+        color: #4B5563;
+    }
+    .pwd-policy-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        line-height: 1.4;
+        font-size: 11.5px;
+    }
+    .pwd-policy-bullet {
+        color: #166534;
+        font-size: 12px;
+        font-weight: bold;
+    }
+
+    /* Primary Submit Button: Solid Deep Black */
     div[data-testid="stFormSubmitButton"] button {
         height: 46px !important;
         min-height: 46px !important;
+        font-family: 'Inter', sans-serif !important;
         font-size: 15px !important;
         font-weight: 600 !important;
-        margin-top: 8px !important;
-        background: #0F172A !important;
+        letter-spacing: 0.01em !important;
+        margin-top: 6px !important;
+        background: #111827 !important;
+        background-color: #111827 !important;
         color: #FFFFFF !important;
+        border: 1px solid #111827 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12) !important;
+        transition: all 0.15s ease !important;
     }
     div[data-testid="stFormSubmitButton"] button:hover {
-        background: #0F6E56 !important;
-        border-color: #0F6E56 !important;
+        background: #1F2937 !important;
+        background-color: #1F2937 !important;
+        border-color: #1F2937 !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+        transform: translateY(-1px) !important;
+    }
+
+    /* Demo Quick Selector Pills */
+    .stApp button,
+    [data-testid="stAppViewContainer"] button,
+    .stButton > button,
+    button[kind="secondary"] {
+        background: #F3F4F6 !important;
+        background-color: #F3F4F6 !important;
+        color: #374151 !important;
+        border: 1px solid #E5E7EB !important;
+        border-radius: 6px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 0 8px !important;
+        white-space: nowrap !important;
+        transition: all 0.15s ease !important;
+        cursor: pointer !important;
+    }
+    .stApp button:hover, [data-testid="stAppViewContainer"] button:hover {
+        background: #E5E7EB !important;
+        color: #111827 !important;
+        border-color: #D1D5DB !important;
+    }
+
+    /* Footnotes */
+    .login-footer-contact {
+        text-align: center;
+        margin-top: 1.8rem;
+        font-size: 13.5px;
+        color: #374151;
+    }
+    .login-footer-contact strong {
+        color: #111827;
+        font-weight: 600;
+    }
+
+    .login-footer-compliance {
+        text-align: center;
+        margin-top: 1.5rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: #9CA3AF;
+        letter-spacing: 0.04em;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # Top Brand Header & Navigation
-    h_left, h_right = st.columns([2.1, 1.2])
-    with h_left:
-        st.markdown("""
-        <div style="display:flex; align-items:center; gap:12px; margin-bottom:0.25rem;">
-          <div style="width:38px; height:38px; border-radius:9px; background-color:#0F6E56; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 2px 8px rgba(15,110,86,0.25);">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.04z"/>
-              <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.04z"/>
-            </svg>
-          </div>
-          <div>
-            <h3 style="font-family:'Outfit', sans-serif; font-size:18px; font-weight:700; color:#0F172A !important; margin:0; line-height:1.2;">NeuroScan AI</h3>
-            <p style="font-size:12.5px; color:#64748B !important; margin:0; font-weight:500;">v2.1 · Clinical Diagnostic Suite</p>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-    with h_right:
-        if st.button("← Back to home", key="login_back_home_btn", use_container_width=True):
-            st.session_state.page = "landing"
-            st.rerun()
-
-    st.markdown("<div style='margin-top:0.75rem;'></div>", unsafe_allow_html=True)
-
-    # Welcome Card (Crisp White Card with Emerald Lock Badge)
+    # 1. ECG Pulse Line Graphic
     st.markdown("""
-    <div style="background-color:#FFFFFF !important; border:1px solid #E2E8F0 !important; border-radius:14px; padding:28px 24px 24px 24px; text-align:center; box-shadow:0 4px 20px -2px rgba(15,23,42,0.06); margin-bottom:14px;">
-      <div style="width:48px; height:48px; border-radius:12px; background-color:#E1F5EE; border:1px solid #C4EBDD; display:flex; align-items:center; justify-content:center; margin:0 auto 14px auto;">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0F6E56" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-        </svg>
-      </div>
-      <h2 style="font-family:'Outfit', sans-serif; font-size:22px; font-weight:700; color:#0F172A !important; margin:0 0 4px 0; line-height:1.3;">Welcome to NeuroScan AI</h2>
-      <p style="font-size:13.5px; color:#0F6E56 !important; margin:0; font-weight:500;">Clinical workstation and patient diagnostic portal</p>
+    <div class="ecg-line-wrapper">
+      <svg width="220" height="28" viewBox="0 0 220 28" fill="none" stroke="#166534" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M0 14h60l8-10 10 22 10-18 8 11 10-5h114"/>
+      </svg>
     </div>
+    <h1 class="login-heading-title">Sign in</h1>
+    <p class="login-heading-sub">Enter your clinical ID to access patient imaging and reports.</p>
     """, unsafe_allow_html=True)
 
-    # Policy Pill
-    st.markdown("""
-    <div style="background-color:#F1F5F9; border:1px solid #E2E8F0; border-radius:8px; padding:8px 14px; text-align:center; font-size:12.5px; color:#475569 !important; margin-bottom:16px; font-weight:500;">
-      🔒 Secure authentication &nbsp;•&nbsp; Role-based clinical access
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Quick Demo Autofill Section
-    st.markdown("<p style='font-size:11.5px; letter-spacing:0.06em; color:#64748B !important; font-weight:700; text-transform:uppercase; margin:0 0 8px 2px;'>⚡ QUICK DEMO AUTOFILL</p>", unsafe_allow_html=True)
-
-    af1, af2, af3 = st.columns(3)
-    with af1:
-        if st.button("👨‍⚕️ Doctor", key="af_doc", use_container_width=True):
+    # 2. Quick Demo Role Selector Pills (Clean Light Theme)
+    r_col1, r_col2, r_col3, r_back = st.columns([1, 1, 1.2, 1])
+    with r_col1:
+        if st.button("Clinician", key="af_doc", use_container_width=True):
             st.session_state["login_user_input"] = "doctor"
             st.session_state["login_pass_input"] = "brain123"
             st.rerun()
-    with af2:
-        if st.button("🧑 Patient", key="af_pat", use_container_width=True):
+    with r_col2:
+        if st.button("Patient", key="af_pat", use_container_width=True):
             st.session_state["login_user_input"] = "patient"
             st.session_state["login_pass_input"] = "patient123"
             st.rerun()
-    with af3:
-        if st.button("🛡️ Admin", key="af_adm", use_container_width=True):
+    with r_col3:
+        if st.button("Admin", key="af_adm", use_container_width=True):
             st.session_state["login_user_input"] = "admin"
             st.session_state["login_pass_input"] = "neuro2025"
             st.rerun()
+    with r_back:
+        if st.button("Home", key="login_back_home_btn", use_container_width=True):
+            st.session_state.page = "landing"
+            st.rerun()
 
-    st.markdown("<div style='margin-top:0.75rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
 
-    # Form Section
+    # 3. Clean Medical Form
     with st.form("exact_login_form", clear_on_submit=False):
         login_user = st.text_input(
-            "Username",
+            "CLINICAL ID",
             value=st.session_state.get("login_user_input", ""),
-            placeholder="Enter username (e.g. doctor, patient, admin)",
+            placeholder="j.martinez",
             key="input_username"
         )
 
         login_pass = st.text_input(
-            "Password",
+            "PASSWORD",
             value=st.session_state.get("login_pass_input", ""),
-            placeholder="Enter password",
+            placeholder="••••••••••••",
             type="password",
             key="input_password"
         )
 
-        st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
-        submit_btn = st.form_submit_button("Sign in to NeuroScan", use_container_width=True)
+        st.markdown("""
+        <div class="login-utility-row">
+          <span class="stay-signed-text">
+            <input type="checkbox" checked style="accent-color:#111827; cursor:pointer; width:13px; height:13px; margin:0;"/>
+            STAY SIGNED IN
+          </span>
+          <a href="#" class="forgot-pwd-link">Forgot password?</a>
+        </div>
 
-    # Form Validation & Authentication Processing
+        <div class="pwd-policy-container">
+          <div class="pwd-policy-header">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Password Security Requirements
+          </div>
+          <div class="pwd-policy-grid">
+            <div class="pwd-policy-item"><span class="pwd-policy-bullet">•</span> Min 8 characters</div>
+            <div class="pwd-policy-item"><span class="pwd-policy-bullet">•</span> 1+ Uppercase (A-Z)</div>
+            <div class="pwd-policy-item"><span class="pwd-policy-bullet">•</span> 1+ Lowercase (a-z)</div>
+            <div class="pwd-policy-item"><span class="pwd-policy-bullet">•</span> 1+ Number (0-9)</div>
+            <div class="pwd-policy-item" style="grid-column: span 2;"><span class="pwd-policy-bullet">•</span> 1+ Special character (!@#$%^&*)</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        submit_btn = st.form_submit_button("Sign in", use_container_width=True)
+
+    # 4. Form Validation & Authentication Processing
     if submit_btn:
         clean_user = login_user.strip() if login_user else ""
         clean_pass = login_pass.strip() if login_pass else ""
 
         if not clean_user and not clean_pass:
-            st.error("⚠️ Please enter both username and password.")
+            st.error("Please enter both clinical ID and password.")
         elif not clean_user:
-            st.error("⚠️ Username is required.")
+            st.error("Clinical ID is required.")
         elif not clean_pass:
-            st.error("⚠️ Password is required.")
+            st.error("Password is required.")
         elif len(clean_user) < 2:
-            st.error("⚠️ Username must be at least 2 characters.")
+            st.error("Clinical ID must be at least 2 characters.")
         else:
             try:
-                with st.spinner("Authenticating credentials..."):
-                    user_record = db.authenticate_user(clean_user, login_pass)
+                user_record = db.authenticate_user(clean_user, login_pass)
 
                 if user_record:
                     st.session_state.logged_in = True
@@ -2191,7 +2410,6 @@ def render_login_page():
                         details=f"User signed into {user_record['role'].title()} portal",
                         status="SUCCESS"
                     )
-                    st.success(f"✓ Welcome back, {user_record.get('full_name') or user_record['username']}!")
                     st.rerun()
                 else:
                     db.log_error(
@@ -2208,7 +2426,7 @@ def render_login_page():
                         details=f"Failed password attempt for '{clean_user}'",
                         status="FAILED"
                     )
-                    st.error("❌ Invalid credentials. Please verify your username and password.")
+                    st.error("Invalid credentials. Please verify your clinical ID and password.")
             except Exception as exc:
                 db.log_error(
                     error_type="DATABASE_ERROR",
@@ -2217,24 +2435,17 @@ def render_login_page():
                     component="database",
                     username=clean_user
                 )
-                st.error("⚠️ Database service error. Please ensure your database is running.")
+                st.error("Database connection unavailable. Please contact system administrator.")
 
-    # Footer
+    # 5. Footnotes matching reference image
     st.markdown("""
-    <div style="text-align:center; margin-top:20px; padding-top:14px; border-top:1px solid #E2E8F0; font-size:12px; color:#64748B !important; line-height:1.6;">
-      Research & clinical evaluation platform &nbsp;·&nbsp; Patient data encrypted<br>
-      HIPAA / GDPR Aligned
+    <div class="login-footer-contact">
+      Need access? <strong>Contact your administrator</strong>
+    </div>
+    <div class="login-footer-compliance">
+      Encrypted connection • HIPAA compliant
     </div>
     """, unsafe_allow_html=True)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-
-
-
-
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2243,12 +2454,11 @@ def render_dashboard_page():
     """Main clinical dashboard — full existing AI pipeline with Patient Info panel."""
 
     # ── Load Models ────────────────────────────────────────────────────────────
-    with st.spinner("Initializing models..."):
-        clf_model   = load_classifier()
-        seg_model, seg_err = load_segmentation_model()
-        guardrail_model, guardrail_err = load_guardrail_model()
-        metrics     = load_metrics()
-        seg_metrics = load_seg_metrics()
+    clf_model   = load_classifier()
+    seg_model, seg_err = load_segmentation_model()
+    guardrail_model, guardrail_err = load_guardrail_model()
+    metrics     = load_metrics()
+    seg_metrics = load_seg_metrics()
 
     # ── Top Bar Header ─────────────────────────────────────────────────────────
     patient_display = st.session_state.patient_name if st.session_state.patient_name else "No Patient"
@@ -2368,7 +2578,9 @@ def render_dashboard_page():
                 with c_np3:
                     new_pat_user = st.text_input("Portal Username", placeholder="e.g. j_doe", key="new_p_user")
                 with c_np4:
-                    new_pat_pass = st.text_input("Portal Password", type="password", placeholder="Enter password", key="new_p_pass")
+                    new_pat_pass = st.text_input("Portal Password", type="password", placeholder="Min 8 chars, Aa1!", key="new_p_pass")
+                
+                st.markdown("<div style='font-size:0.68rem; color:#8B949E; margin-bottom:0.5rem;'>🔒 <b>Password Policy</b>: Min 8 characters, at least 1 uppercase, 1 lowercase, 1 digit, and 1 special symbol.</div>", unsafe_allow_html=True)
 
                 if st.button("➕ Register Patient Account", key="btn_create_pat_account", use_container_width=True):
                     if not new_pat_name or not new_pat_user or not new_pat_pass:
@@ -2383,12 +2595,12 @@ def render_dashboard_page():
                             doctor_username=st.session_state.username
                         )
                         if err:
-                            st.error(f"❌ {err}")
+                            st.error(f"❌ Password Policy / Registration Error: {err}")
                         else:
                             st.session_state.patient_name = new_pat_name
                             st.session_state.patient_age = int(new_pat_age)
                             st.session_state.patient_gender = new_pat_gen
-                            st.success(f"✓ Patient @{new_pat_user} ({new_pat_name}) registered successfully!")
+                            st.success(f"✓ Patient @{new_pat_user} ({new_pat_name}) registered with secure bcrypt hash!")
                             st.rerun()
 
 
@@ -3298,10 +3510,9 @@ def render_dashboard_page():
 
 def render_patient_dashboard():
     """Simplified, patient-friendly portal for review and personal health summary."""
-    with st.spinner("Loading AI health assistant..."):
-        clf_model = load_classifier()
-        seg_model, seg_err = load_segmentation_model()
-        guardrail_model, guardrail_err = load_guardrail_model()
+    clf_model = load_classifier()
+    seg_model, seg_err = load_segmentation_model()
+    guardrail_model, guardrail_err = load_guardrail_model()
 
     username_display = st.session_state.username or "Patient"
     patient_name_val = st.session_state.patient_name or username_display
@@ -3794,14 +4005,15 @@ def render_admin_dashboard():
                 with c_au1:
                     new_adm_u = st.text_input("Username", placeholder="e.g. dr_chen", key="adm_new_u")
                 with c_au2:
-                    new_adm_p = st.text_input("Password", type="password", placeholder="Enter password", key="adm_new_p")
+                    new_adm_p = st.text_input("Password", type="password", placeholder="Min 8 chars, Aa1!", key="adm_new_p")
                 new_adm_r = st.selectbox("Role Assignment", ["doctor", "admin"], key="adm_new_r")
+                st.markdown("<div style='font-size:0.68rem; color:#8B949E; margin-bottom:0.5rem;'>🔒 <b>Security Policy</b>: Min 8 characters with uppercase, lowercase, digit, and symbol.</div>", unsafe_allow_html=True)
                 if st.button("➕ Provision Clinician Account", key="btn_add_user_adm", use_container_width=True):
                     clean_adm_u = new_adm_u.strip() if new_adm_u else ""
                     if clean_adm_u and new_adm_p and new_adm_fn:
-                        uid, err = db.create_user(clean_adm_u, new_adm_p, new_adm_r, full_name=new_adm_fn.strip())
+                        uid, err = db.create_user(clean_adm_u, new_adm_p, new_adm_r, full_name=new_adm_fn.strip(), enforce_policy=True)
                         if err:
-                            st.error(f"❌ {err}")
+                            st.error(f"❌ Password Policy / Provisioning Error: {err}")
                         else:
                             db.log_activity(
                                 username=st.session_state.username,
@@ -3810,7 +4022,7 @@ def render_admin_dashboard():
                                 details=f"Admin provisioned {new_adm_r.title()} account for '{new_adm_fn.strip()}' (@{clean_adm_u})",
                                 status="SUCCESS"
                             )
-                            st.success(f"✓ Clinician @{clean_adm_u} ({new_adm_fn.strip()}) created successfully in database!")
+                            st.success(f"✓ Clinician @{clean_adm_u} ({new_adm_fn.strip()}) provisioned with bcrypt hash!")
                             st.rerun()
                     else:
                         st.error("Please fill in Full Name, Username, and Password.")
@@ -4134,10 +4346,14 @@ if st.session_state.page == "landing":
     render_landing_page()
 
 elif st.session_state.page == "login":
-    render_login_page()
+    if st.session_state.get("logged_in", False):
+        st.session_state.page = "dashboard"
+        st.rerun()
+    else:
+        render_login_page()
 
 else:  # "dashboard"
-    if st.session_state.logged_in:
+    if st.session_state.get("logged_in", False):
         current_role = st.session_state.get("role", "doctor")
         if current_role == "admin":
             render_admin_dashboard()
