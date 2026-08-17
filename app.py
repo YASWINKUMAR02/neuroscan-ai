@@ -14,9 +14,14 @@ import cv2
 from torchvision import transforms
 from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
-# ── Database Layer (SQLite Persistence) ───────────────────────────────────────
+# ── Database Layer (MySQL with SQLite Fallback) ───────────────────────────────
 import database as db
 db.init_db()
+
+# ── Cloud Storage Layer (AWS S3) ──────────────────────────────────────────────
+import s3_storage as s3
+import rag_engine
+
 
 # ── PDF Generation Imports (ReportLab) ─────────────────────────────────────────
 try:
@@ -67,11 +72,12 @@ if "patient_gender" not in st.session_state:
 
 
 # ── CSS (DICOM Clinical Workstation Theme + Landing + Auth) ────────────────────
-st.markdown("""
-<style>
+st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css');
 
 /* ── Base resets ── */
+
 html, body, [class*="css"] {
     font-family: 'Inter', 'Outfit', sans-serif;
     color: #E6EDF3;
@@ -1820,144 +1826,418 @@ def render_login_page():
     text-align: center; line-height: 1.6; margin-top: 32px;
     border-top: 1px solid var(--border); padding-top: 14px;
   }
+
+  /* ── Dedicated Login Page Modern Theme (Matches UI Mockup) ── */
+  .login-container-card {
+    width: 100%;
+    max-width: 380px;
+    margin: 0 auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  .login-brand-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .login-brand-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .login-brand-square {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background-color: #0F6E56;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .login-brand-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #17181A;
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  .login-brand-sub {
+    font-size: 10.5px;
+    color: #888780;
+    margin: 0;
+  }
+
+  .login-welcome-box {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E5E2;
+    border-radius: 12px;
+    padding: 24px 16px 20px 16px;
+    text-align: center;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  }
+
+  .login-mint-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background-color: #E1F5EE;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px auto;
+  }
+
+  .login-welcome-h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #17181A;
+    margin: 0 0 2px 0;
+    line-height: 1.3;
+  }
+
+  .login-welcome-h2 {
+    font-size: 17px;
+    font-weight: 700;
+    color: #17181A;
+    margin: 0 0 8px 0;
+    line-height: 1.3;
+  }
+
+  .login-welcome-caption {
+    font-size: 11px;
+    color: #0F6E56;
+    margin: 0;
+    font-weight: 500;
+  }
+
+  .login-policy-bar {
+    background-color: #F0F1EE;
+    border-radius: 6px;
+    padding: 7px 12px;
+    text-align: center;
+    font-size: 11px;
+    color: #5F5E5A;
+    margin-bottom: 14px;
+  }
+
+  .login-autofill-heading {
+    font-size: 9.5px;
+    letter-spacing: 0.05em;
+    color: #888780;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin: 0 0 6px 2px;
+  }
+
+  /* Black Buttons */
+  .login-black-btn button {
+    width: 100% !important;
+    background-color: #17181A !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 8px 4px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: opacity 0.15s ease !important;
+  }
+  .login-black-btn button:hover {
+    opacity: 0.9 !important;
+  }
+
+  .login-back-btn button {
+    background-color: #17181A !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 6px !important;
+    padding: 5px 12px !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    height: 30px !important;
+    min-height: 30px !important;
+  }
+
+  /* Form Fields Styling */
+  .login-form-wrapper div[data-testid="stTextInput"] label p {
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    color: #17181A !important;
+    margin-bottom: 2px !important;
+  }
+
+  .login-form-wrapper div[data-testid="stTextInput"] input {
+    background-color: #FFFFFF !important;
+    color: #17181A !important;
+    border: 1px solid #E5E5E2 !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    height: 36px !important;
+    padding: 0 12px !important;
+  }
+  .login-form-wrapper div[data-testid="stTextInput"] input:focus {
+    outline: none !important;
+    border-color: #0F6E56 !important;
+    box-shadow: 0 0 0 2px #E1F5EE !important;
+  }
+
+  .login-form-wrapper div[data-testid="stFormSubmitButton"] button {
+    width: 100% !important;
+    background-color: #17181A !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 10px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    margin-top: 6px !important;
+    cursor: pointer !important;
+  }
+  .login-form-wrapper div[data-testid="stFormSubmitButton"] button:hover {
+    opacity: 0.92 !important;
+  }
+
+  .login-legal-footer {
+    text-align: center;
+    margin-top: 14px;
+    padding-top: 10px;
+    font-size: 9.5px;
+    color: #888780;
+    line-height: 1.5;
+  }
 </style>
 """, unsafe_allow_html=True)
 
-    # Render header navigation bar
+def render_login_page():
+    """Renders exact modern minimalist login UI with Tabler icons, welcome card, policy pill, autofill, and robust validation."""
+    # Force light theme & high-specificity black buttons / white inputs
     st.markdown("""
-<header class="custom-landing-header">
-<div class="brand">
-<div class="brand-mark">
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-<path d="M9 3a4 4 0 0 0-4 4 3 3 0 0 0-2 2.8V13a3 3 0 0 0 2 2.8V17a4 4 0 0 0 4 4h1V3H9z"/>
-<path d="M15 3a4 4 0 0 1 4 4 3 3 0 0 1 2 2.8V13a3 3 0 0 1-2 2.8V17a4 4 0 0 1-4 4h-1V3h1z"/>
-<path d="M12 3v18"/>
-</svg>
-</div>
-<span class="brand-name">NeuroScan AI</span>
-<span class="brand-tag">v2.1 · Diagnostic Suite</span>
-</div>
-<div class="nav-cta">
-<a href="?nav=landing" target="_self" class="btn-solid" style="background:var(--ink-soft); font-size:13px; font-weight:600; padding:8px 16px; border-radius:6px; color:#fff; text-decoration:none;">← Back to Home</a>
-</div>
-</header>
-""", unsafe_allow_html=True)
+    <style>
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
+        background-color: #F5F6F5 !important;
+        color: #17181A !important;
+    }
 
-    # Center-aligned auth outer block
-    _, center_col, _ = st.columns([1, 1.4, 1])
+    /* All buttons on login page: Black pill buttons with white text */
+    .stApp button,
+    [data-testid="stAppViewContainer"] button,
+    .stButton > button,
+    button[kind="primary"],
+    button[kind="secondary"],
+    button[kind="secondaryFormSubmit"],
+    div[data-testid="stFormSubmitButton"] button {
+        background: #17181A !important;
+        background-color: #17181A !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        transition: opacity 0.15s ease !important;
+    }
+    .stApp button:hover, [data-testid="stAppViewContainer"] button:hover {
+        opacity: 0.9 !important;
+    }
+
+    /* Input fields: Clean white background with dark text */
+    div[data-testid="stTextInput"] input,
+    [data-testid="stTextInput"] input,
+    input[type="text"],
+    input[type="password"] {
+        background: #FFFFFF !important;
+        background-color: #FFFFFF !important;
+        color: #17181A !important;
+        border: 1px solid #E5E5E2 !important;
+        border-radius: 6px !important;
+        font-size: 13px !important;
+        height: 38px !important;
+    }
+    div[data-testid="stTextInput"] input:focus {
+        border-color: #0F6E56 !important;
+        box-shadow: 0 0 0 2px #E1F5EE !important;
+    }
+
+    /* Input field labels */
+    div[data-testid="stTextInput"] label,
+    div[data-testid="stTextInput"] label p {
+        color: #17181A !important;
+        font-weight: 600 !important;
+        font-size: 12px !important;
+        margin-bottom: 2px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Centered container column
+    _, center_col, _ = st.columns([1, 1.25, 1])
     with center_col:
+        # Header Row
+        h_left, h_right = st.columns([2.2, 1.2])
+        with h_left:
+            st.markdown("""
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:32px; height:32px; border-radius:6px; background-color:#0F6E56; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.04z"/>
+                  <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.04z"/>
+                </svg>
+              </div>
+              <div>
+                <p style="font-size:13.5px; font-weight:700; color:#17181A !important; margin:0; line-height:1.2;">NeuroScan AI</p>
+                <p style="font-size:10.5px; color:#888780 !important; margin:0;">v2.1 · Diagnostic Suite</p>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with h_right:
+            if st.button("Back to home", key="login_back_home_btn", use_container_width=True):
+                st.session_state.page = "landing"
+                st.rerun()
+
+        st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
+
+        # Welcome Card (Crisp White Card with Green Lock Badge)
         st.markdown("""
-<div class="auth-outer">
-<div class="auth-card-wrapper">
-<div class="auth-header-block">
-<div class="auth-header-icon">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-<rect x="3" y="11" width="18" height="10" rx="2" ry="2"/>
-<path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-</svg>
-</div>
-<h2 class="auth-card-title">Welcome back</h2>
-<p class="auth-card-sub">Sign in to your clinical workstation or request a new account</p>
-</div>
-""", unsafe_allow_html=True)
+        <div style="background-color:#FFFFFF !important; border:1px solid #E5E5E2 !important; border-radius:12px; padding:24px 16px 20px 16px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,0.04); margin-bottom:12px;">
+          <div style="width:38px; height:38px; border-radius:8px; background-color:#E1F5EE; display:flex; align-items:center; justify-content:center; margin:0 auto 12px auto;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F6E56" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <p style="font-size:16px; font-weight:600; color:#17181A !important; margin:0 0 2px 0; line-height:1.3;">Welcome to</p>
+          <p style="font-size:17px; font-weight:700; color:#17181A !important; margin:0 0 8px 0; line-height:1.3;">NeuroScan AI</p>
+          <p style="font-size:11px; color:#0F6E56 !important; margin:0; font-weight:500;">Clinical workstation and patient diagnostic portal</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        tab = st.radio(
-            "Select action",
-            ["🔑  Login", "🔒  Account Provisioning Policy"],
-            horizontal=True,
-            label_visibility="collapsed",
-            key="auth_tab",
-        )
+        # Policy Pill
+        st.markdown("""
+        <div style="background-color:#F0F1EE; border-radius:6px; padding:7px 12px; text-align:center; font-size:11px; color:#5F5E5A !important; margin-bottom:14px; font-weight:500;">
+          Secure login &nbsp;•&nbsp; Role provisioning policy
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.markdown("<div style='margin-top:0.8rem'></div>", unsafe_allow_html=True)
+        # Quick Demo Autofill Section
+        st.markdown("<p style='font-size:9.5px; letter-spacing:0.05em; color:#888780 !important; font-weight:600; text-transform:uppercase; margin:0 0 6px 2px;'>QUICK DEMO AUTOFILL</p>", unsafe_allow_html=True)
 
-        if tab == "🔑  Login":
-            st.markdown("<div class='form-field-label'>Username</div>", unsafe_allow_html=True)
+        af1, af2, af3 = st.columns(3)
+        with af1:
+            if st.button("Doctor", key="af_doc", use_container_width=True):
+                st.session_state["login_user_input"] = "doctor"
+                st.session_state["login_pass_input"] = "brain123"
+                st.rerun()
+        with af2:
+            if st.button("Patient", key="af_pat", use_container_width=True):
+                st.session_state["login_user_input"] = "patient"
+                st.session_state["login_pass_input"] = "patient123"
+                st.rerun()
+        with af3:
+            if st.button("Admin", key="af_adm", use_container_width=True):
+                st.session_state["login_user_input"] = "admin"
+                st.session_state["login_pass_input"] = "neuro2025"
+                st.rerun()
+
+        st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
+
+        # Form Section
+        with st.form("exact_login_form", clear_on_submit=False):
             login_user = st.text_input(
-                "Username", placeholder="Enter your username",
-                label_visibility="collapsed", key="login_user"
+                "Username",
+                value=st.session_state.get("login_user_input", ""),
+                placeholder="Enter your clinical or patient username",
+                key="input_username"
             )
 
-            st.markdown("<div class='form-field-label'>Password</div>", unsafe_allow_html=True)
             login_pass = st.text_input(
-                "Password", placeholder="Enter your password",
-                type="password", label_visibility="collapsed", key="login_pass"
+                "Password",
+                value=st.session_state.get("login_pass_input", ""),
+                placeholder="Enter your account password",
+                type="password",
+                key="input_password"
             )
 
-            st.markdown("<div style='margin-top:1.2rem'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='margin-top:0.4rem;'></div>", unsafe_allow_html=True)
+            submit_btn = st.form_submit_button("Sign in", use_container_width=True)
 
-            if st.button("Login →", key="do_login", use_container_width=True):
-                if not login_user or not login_pass:
-                    st.error("Please fill in both fields.")
-                else:
-                    user_record = db.authenticate_user(login_user.strip(), login_pass)
+        # Form Validation & Authentication Processing
+        if submit_btn:
+            clean_user = login_user.strip() if login_user else ""
+            clean_pass = login_pass.strip() if login_pass else ""
+
+            if not clean_user and not clean_pass:
+                st.error("⚠️ Please enter both username and password.")
+            elif not clean_user:
+                st.error("⚠️ Username is required.")
+            elif not clean_pass:
+                st.error("⚠️ Password is required.")
+            elif len(clean_user) < 2:
+                st.error("⚠️ Username must be at least 2 characters.")
+            else:
+                try:
+                    with st.spinner("Authenticating..."):
+                        user_record = db.authenticate_user(clean_user, login_pass)
+
                     if user_record:
                         st.session_state.logged_in = True
-                        st.session_state.username  = user_record["username"]
-                        st.session_state.role      = user_record["role"]
-                        st.session_state.page      = "dashboard"
+                        st.session_state.username = user_record["username"]
+                        st.session_state.role = user_record["role"]
+                        st.session_state.page = "dashboard"
+
                         db.log_activity(
                             username=user_record["username"],
                             action="USER_LOGIN",
                             role=user_record["role"],
-                            details=f"User logged into {user_record['role'].title()} portal",
+                            details=f"User signed into {user_record['role'].title()} portal",
                             status="SUCCESS"
                         )
-                        st.success(f"Welcome back, {user_record['username']}! Accessing {user_record['role'].title()} portal…")
+                        st.success(f"✓ Welcome back, {user_record.get('full_name') or user_record['username']}!")
                         st.rerun()
                     else:
                         db.log_error(
                             error_type="AUTH_FAILED",
                             severity="WARNING",
-                            message=f"Failed login attempt for username: '{login_user.strip()}'",
+                            message=f"Failed login attempt for username: '{clean_user}'",
                             component="auth",
-                            username=login_user.strip()
+                            username=clean_user
                         )
                         db.log_activity(
-                            username=login_user.strip(),
+                            username=clean_user,
                             action="USER_LOGIN",
                             role="unknown",
-                            details=f"Failed password attempt for '{login_user.strip()}'",
+                            details=f"Failed password attempt for '{clean_user}'",
                             status="FAILED"
                         )
-                        st.error("❌ Invalid username or password.")
+                        st.error("❌ Invalid credentials. Please verify your username and password.")
+                except Exception as exc:
+                    db.log_error(
+                        error_type="DATABASE_ERROR",
+                        severity="CRITICAL",
+                        message=str(exc),
+                        component="database",
+                        username=clean_user
+                    )
+                    st.error("⚠️ Database service error. Please ensure your database is running.")
 
-
-            # Demo credentials panel
-            st.markdown("""
-<div class="demo-panel">
-<div class="demo-panel-label">Quick Demo Access by Role</div>
-<div class="demo-panel-value" style="margin-bottom:4px;">👨‍⚕️ <b>Doctor:</b> <code>doctor</code> &nbsp;·&nbsp; <code>brain123</code></div>
-<div class="demo-panel-value" style="margin-bottom:4px;">👤 <b>Patient:</b> <code>patient</code> &nbsp;·&nbsp; <code>patient123</code></div>
-<div class="demo-panel-value">⚙️ <b>Admin:</b> <code>admin</code> &nbsp;·&nbsp; <code>neuro2025</code></div>
-</div>
-""", unsafe_allow_html=True)
-
-        else:
-            st.markdown("""
-            <div style="background:rgba(0,212,255,0.06); border:1px solid rgba(0,212,255,0.2); border-radius:8px; padding:1.2rem; margin-top:0.4rem;">
-                <h4 style="color:#00D4FF; margin:0 0 0.6rem 0; font-size:0.95rem; font-family:'Outfit', sans-serif;">🔒 Institutional Role-Based Access Policy</h4>
-                <div style="font-size:0.83rem; color:#E6EDF3; line-height:1.7;">
-                    • <b>👨‍⚕️ Clinicians / Doctors:</b> Accounts are created exclusively by the <b>System Administrator</b> inside the Admin Console.<br/>
-                    • <b>👤 Patients:</b> Accounts are onboarded and provisioned by your <b>Consulting Doctor</b> during clinical intake.<br/>
-                    • <b>⚙️ SuperAdmin:</b> System Administration for user management, hardware diagnostics, and pipeline auditing.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
-            st.info("💡 If you already have credentials assigned by your physician or hospital administration, switch to the '🔑 Login' tab above.")
-
-
-
-
-
+        # Footer
         st.markdown("""
-</div>
-<div class="login-disclaimer">
-🔒 Research &amp; educational use only &nbsp;·&nbsp; Patient data processed locally &nbsp;·&nbsp; Not for clinical diagnosis
-</div>
-</div>
-""", unsafe_allow_html=True)
+        <div style="text-align:center; margin-top:16px; padding-top:10px; font-size:9.5px; color:#888780 !important; line-height:1.5;">
+          Research and clinical evaluation use &nbsp;·&nbsp; Patient data encrypted and stored locally/cloud<br>
+          HIPAA/GDPR aligned
+        </div>
+        """, unsafe_allow_html=True)
+
+
+
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2225,10 +2505,15 @@ def render_dashboard_page():
                         conf_data=conf_data,
                     )
 
-                    # Store Report in SQLite Database
+                    # Store Report in S3 & Database
                     clean_name = "".join(c for c in (st.session_state.patient_name or "Patient") if c.isalnum() or c in ('_', '-'))
                     rep_code = f"RPT-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
                     rep_fname = f"NeuroScan_Report_{clean_name}_{datetime.datetime.now().strftime('%Y%m%d')}.pdf"
+
+                    # Upload PDF report & scan to AWS S3
+                    s3_key, s3_url = s3.upload_pdf_to_s3(pdf_report_bytes, rep_fname)
+                    s3.upload_mri_to_s3(pil_img, uploaded.name)
+
                     db.save_report(
                         report_code=rep_code,
                         patient_name=st.session_state.patient_name or "Anonymous Patient",
@@ -2241,15 +2526,18 @@ def render_dashboard_page():
                         patient_age=st.session_state.patient_age,
                         patient_gender=st.session_state.patient_gender,
                         doctor_username=st.session_state.username,
-                        tumor_area_cm2=area_data['area_cm2'] if area_data else None
+                        tumor_area_cm2=area_data['area_cm2'] if area_data else None,
+                        s3_key=s3_key,
+                        s3_url=s3_url
                     )
                     db.log_activity(
                         username=st.session_state.username or "doctor",
                         action="REPORT_GENERATE",
                         role=st.session_state.role,
-                        details=f"Generated clinical PDF report '{rep_code}' for patient '{st.session_state.patient_name or 'Anonymous'}' (Diagnosis: {predicted_class.title()})",
+                        details=f"Generated clinical PDF report '{rep_code}' for patient '{st.session_state.patient_name or 'Anonymous'}' (Stored in S3 & DB)",
                         status="SUCCESS"
                     )
+
 
                 except Exception as exc:
                     pdf_gen_error = str(exc)
@@ -2687,6 +2975,27 @@ def render_dashboard_page():
                     else:
                         st.info("Analysis required to generate report.")
 
+            # ── Store Diagnostic Report into Session State for AI Grounding ──────
+            active_report = {
+                "patient_name": st.session_state.get("patient_name", "Anonymous"),
+                "patient_age": st.session_state.get("patient_age", "N/A"),
+                "patient_gender": st.session_state.get("patient_gender", "N/A"),
+                "diagnosis": predicted_class,
+                "confidence_pct": conf,
+                "has_tumor": has_tumor,
+                "probabilities": {c: float(p) for c, p in zip(CLASSES, probs)},
+                "area_cm2": area_data['area_cm2'] if area_data else None,
+                "area_mm2": area_data['area_mm2'] if area_data else None,
+                "tumor_pixels": area_data['pixel_count'] if area_data else None,
+                "shape_label": shape.get("shape_label") if (has_tumor and 'shape' in locals() and shape) else None,
+                "circularity": shape.get("circularity") if (has_tumor and 'shape' in locals() and shape) else None,
+                "compactness": shape.get("compactness") if (has_tumor and 'shape' in locals() and shape) else None,
+                "solidity": shape.get("solidity") if (has_tumor and 'shape' in locals() and shape) else None,
+                "gradcam_focus": f"{vq}-{hq} Region" if ('vq' in locals() and 'hq' in locals()) else None,
+                "scan_filename": uploaded.name if ('uploaded' in locals() and uploaded) else "Scan_MRI"
+            }
+            st.session_state["active_diagnostic_report"] = active_report
+            st.session_state["last_diagnosis"] = predicted_class
 
         else:
             with st.container(border=True):
@@ -2836,10 +3145,15 @@ def render_patient_dashboard():
                         area_data=area_data,
                     )
 
-                    # Store Report in SQLite Database
+                    # Store Report in S3 & Database
                     clean_name = "".join(c for c in (st.session_state.patient_name or "Patient") if c.isalnum() or c in ('_', '-'))
                     rep_code = f"PAT-RPT-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
                     rep_fname = f"Patient_Report_{clean_name}_{datetime.datetime.now().strftime('%Y%m%d')}.pdf"
+
+                    # Upload PDF report & scan to AWS S3
+                    s3_key, s3_url = s3.upload_pdf_to_s3(pdf_report_bytes, rep_fname)
+                    s3.upload_mri_to_s3(pil_img, uploaded.name)
+
                     db.save_report(
                         report_code=rep_code,
                         patient_name=st.session_state.patient_name or "Anonymous Patient",
@@ -2851,8 +3165,11 @@ def render_patient_dashboard():
                         patient_age=st.session_state.patient_age,
                         patient_gender=st.session_state.patient_gender,
                         doctor_username=st.session_state.username or "patient",
-                        tumor_area_cm2=area_data['area_cm2'] if area_data else None
+                        tumor_area_cm2=area_data['area_cm2'] if area_data else None,
+                        s3_key=s3_key,
+                        s3_url=s3_url
                     )
+
                 except Exception as exc:
                     pdf_report_bytes = None
                     db.log_error(
@@ -2934,6 +3251,22 @@ def render_patient_dashboard():
                         </div>
                         """, unsafe_allow_html=True)
 
+                    # Save diagnostic report for patient AI copilot
+                    pat_report = {
+                        "patient_name": st.session_state.get("username", "Patient"),
+                        "diagnosis": predicted_class,
+                        "confidence_pct": conf_val,
+                        "has_tumor": has_tumor,
+                        "probabilities": {c: float(p) for c, p in zip(CLASSES, probs)},
+                        "area_cm2": area_data['area_cm2'] if area_data else None,
+                        "area_mm2": area_data['area_mm2'] if area_data else None,
+                        "tumor_pixels": area_data['pixel_count'] if area_data else None,
+                        "scan_filename": uploaded.name if ('uploaded' in locals() and uploaded) else "Scan_MRI"
+                    }
+                    st.session_state["active_diagnostic_report"] = pat_report
+                    st.session_state["last_diagnosis"] = predicted_class
+
+
             else:
                 st.error("Invalid image: Please upload a clear brain MRI scan in JPG or PNG format.")
         else:
@@ -2979,11 +3312,91 @@ def render_patient_dashboard():
             </div>
             """, unsafe_allow_html=True)
 
+    # ── Interactive Medical RAG Patient Chatbot ──────────────────────────────
+    st.markdown("<div style='margin-top:1.5rem;'></div>", unsafe_allow_html=True)
+    with st.container(border=True):
         st.markdown("""
-        <div class="disclaimer-text">
-            🔒 Research &amp; educational use only · Patient data processed locally · Not for clinical diagnosis
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:1.4rem;">💬</span>
+                <div>
+                    <h4 style="margin:0; color:#E6EDF3; font-size:1rem; font-family:'Outfit', sans-serif;">Ask NeuroScan Assistant (Medical RAG Copilot)</h4>
+                    <p style="margin:0; color:#8B949E; font-size:0.75rem;">Instant plain-language answers grounded in verified neuro-oncology guidelines</p>
+                </div>
+            </div>
+            <span style="background:rgba(63,185,80,0.15); color:#3FB950; border:1px solid rgba(63,185,80,0.3); font-size:0.7rem; padding:2px 8px; border-radius:12px; font-weight:600;">
+                ✓ RAG Grounded
+            </span>
         </div>
         """, unsafe_allow_html=True)
+
+        if "patient_chat_history" not in st.session_state:
+            st.session_state.patient_chat_history = [
+                {
+                    "role": "assistant",
+                    "content": f"Hello {patient_name_val.title()}! I am your NeuroScan Health Assistant. I can help explain your brain MRI scan findings, provide plain-language definitions, and suggest questions for your next doctor's appointment. What would you like to know?"
+                }
+            ]
+
+        # 1-Click Quick Question Chips
+        st.markdown("<p style='font-size:0.72rem; color:#8B949E; margin-bottom:0.3rem;'>Suggested Questions:</p>", unsafe_allow_html=True)
+        q_cols = st.columns(4)
+        quick_questions = [
+            "Explain my MRI scan report",
+            "What diet & remedies help?",
+            "How to maintain daily health?",
+            "What questions to ask my doctor?"
+        ]
+        
+        selected_quick_q = None
+        for i, q in enumerate(quick_questions):
+            with q_cols[i]:
+                if st.button(q, key=f"quick_q_{i}", use_container_width=True):
+                    selected_quick_q = q
+
+
+        # Display Chat History
+        chat_box = st.container(height=320, border=False)
+        with chat_box:
+            for msg in st.session_state.patient_chat_history:
+                with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "🧠"):
+                    st.markdown(msg["content"])
+                    if msg.get("sources"):
+                        st.caption(f"📚 Sources: {', '.join(msg['sources'])}")
+
+
+        # Chat Input
+        user_chat_input = st.chat_input("Ask a question about your scan, recovery, or brain health...")
+        prompt_to_process = selected_quick_q or user_chat_input
+
+        if prompt_to_process:
+            st.session_state.patient_chat_history.append({"role": "user", "content": prompt_to_process})
+            
+            with st.spinner("Retrieving verified medical guidance..."):
+                rag_reply = rag_engine.query_medical_rag(
+                    user_query=prompt_to_process,
+                    diagnosis_context=predicted_class,
+                    tumor_area_cm2=area_data['area_cm2'] if area_data else None,
+                    role="patient",
+                    username=st.session_state.get("username", "patient"),
+                    report_data=st.session_state.get("active_diagnostic_report", None)
+                )
+
+
+
+            st.session_state.patient_chat_history.append({
+                "role": "assistant",
+                "content": rag_reply["answer"],
+                "sources": rag_reply.get("sources", [])
+            })
+            st.rerun()
+
+    st.markdown("""
+    <div class="disclaimer-text">
+        🔒 Research &amp; educational use only · Patient data processed locally · Not for clinical diagnosis
+    </div>
+    """, unsafe_allow_html=True)
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3170,19 +3583,20 @@ def render_admin_dashboard():
         
         if all_reps:
             # Header Row
-            rh1, rh2, rh3, rh4, rh5, rh6 = st.columns([1.6, 1.4, 1.2, 1.2, 1.2, 1.2])
+            rh1, rh2, rh3, rh4, rh5, rh6, rh7 = st.columns([1.5, 1.3, 1.1, 1, 1, 1.1, 1.2])
             rh1.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Report Code</span>", unsafe_allow_html=True)
             rh2.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Patient</span>", unsafe_allow_html=True)
             rh3.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Diagnosis</span>", unsafe_allow_html=True)
             rh4.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Confidence</span>", unsafe_allow_html=True)
             rh5.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>Doctor</span>", unsafe_allow_html=True)
             rh6.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>PDF Export</span>", unsafe_allow_html=True)
+            rh7.markdown("<span style='font-size:0.72rem; color:#8B949E; text-transform:uppercase; font-weight:700;'>AWS S3 Cloud</span>", unsafe_allow_html=True)
             st.markdown("<hr style='border:0; border-top:1px solid #21262D; margin:0.3rem 0 0.6rem 0;'>", unsafe_allow_html=True)
 
             for r in all_reps:
                 r_c = "#34C759" if r["predicted_class"] == "notumor" else ("#FF9500" if r["predicted_class"] in ["meningioma", "pituitary"] else "#FF3B30")
                 
-                c1, c2, c3, c4, c5, c6 = st.columns([1.6, 1.4, 1.2, 1.2, 1.2, 1.2])
+                c1, c2, c3, c4, c5, c6, c7 = st.columns([1.5, 1.3, 1.1, 1, 1, 1.1, 1.2])
                 c1.markdown(f"<span style='font-family:monospace; font-weight:700; color:#00D4FF; font-size:0.8rem;'>{r['report_code']}</span>", unsafe_allow_html=True)
                 c2.markdown(f"<span style='font-size:0.82rem; color:#E6EDF3;'><b>{r['patient_name']}</b><br/><span style='color:#8B949E; font-size:0.72rem;'>{r['patient_age']}y · {r['patient_gender']}</span></span>", unsafe_allow_html=True)
                 c3.markdown(f"<span style='background:{r_c}18; color:{r_c}; border:1px solid {r_c}44; border-radius:99px; font-size:0.72rem; padding:2px 8px; font-weight:600;'>{r['predicted_class'].title()}</span>", unsafe_allow_html=True)
@@ -3201,6 +3615,18 @@ def render_admin_dashboard():
                         )
                     else:
                         st.markdown("<span style='font-size:0.72rem; color:#8B949E;'>N/A</span>", unsafe_allow_html=True)
+                with c7:
+                    s3_url_val = r.get("s3_url")
+                    if s3_url_val:
+                        st.markdown(f"""
+                        <a href="{s3_url_val}" target="_blank" style="text-decoration:none;">
+                            <button style="background:rgba(0,212,255,0.12); border:1px solid rgba(0,212,255,0.3); color:#00D4FF; font-size:0.7rem; padding:4px 8px; border-radius:4px; cursor:pointer; width:100%; font-weight:600;">
+                                ☁️ S3 Link
+                            </button>
+                        </a>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown("<span style='font-size:0.72rem; color:#8B949E;'>Local only</span>", unsafe_allow_html=True)
                 st.markdown("<div style='margin-bottom:0.4rem;'></div>", unsafe_allow_html=True)
         else:
             st.markdown("""
@@ -3211,12 +3637,13 @@ def render_admin_dashboard():
             """, unsafe_allow_html=True)
 
     with tab_sys:
-
         d_c1, d_c2 = st.columns(2, gap="large")
         with d_c1:
             with st.container(border=True):
                 st.markdown("<div class='pro-card-title'>PyTorch &amp; Hardware Runtime</div>", unsafe_allow_html=True)
                 gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A (CPU Mode)'
+                s3_ok, s3_msg = s3.is_s3_available()
+                s3_color = "#3FB950" if s3_ok else "#FF9500"
                 st.markdown(f"""
                 <div style="font-size:0.84rem; line-height:1.9; color:#E6EDF3;">
                     • <b>PyTorch Version:</b> <code style="color:#00D4FF;">{torch.__version__}</code><br/>
@@ -3225,9 +3652,11 @@ def render_admin_dashboard():
                     • <b>GPU Device Name:</b> <code>{gpu_name}</code><br/>
                     • <b>CUDA Device Count:</b> <code>{torch.cuda.device_count()}</code><br/>
                     • <b>Database Backend:</b> <code style="color:#3FB950;">{db.get_active_engine_name()}</code><br/>
+                    • <b>AWS S3 Cloud Storage:</b> <code style="color:{s3_color};">{s3_msg}</code><br/>
                     • <b>ReportLab PDF Engine:</b> <code>{'Online' if REPORTLAB_AVAILABLE else 'Missing'}</code>
                 </div>
                 """, unsafe_allow_html=True)
+
 
 
         with d_c2:
@@ -3407,6 +3836,131 @@ def render_admin_dashboard():
 
 
 
+# ── Floating Overlay Medical RAG Chatbot Modal ──────────────────────────────
+if hasattr(st, "dialog"):
+    @st.dialog("🧠 NeuroScan Medical AI Copilot (RAG)", width="large")
+    def open_copilot_overlay_dialog():
+        _render_copilot_dialog_content()
+else:
+    def open_copilot_overlay_dialog():
+        _render_copilot_dialog_content()
+
+def _render_copilot_dialog_content():
+    user_role = st.session_state.get("role", "doctor")
+    username_val = st.session_state.get("username", "User")
+    
+    st.markdown(f"""
+    <div style="display:flex; justify-content:space-between; align-items:center; background:#161B22; border:1px solid #30363D; border-radius:8px; padding:0.6rem 1rem; margin-bottom:0.75rem;">
+        <div>
+            <span style="font-weight:700; color:#E6EDF3; font-size:0.9rem;">Medical RAG Copilot</span>
+            <span style="color:#8B949E; font-size:0.75rem; margin-left:8px;">| Profile: <b style="color:#00D4FF;">@{username_val} ({user_role.title()})</b></span>
+        </div>
+        <span style="background:rgba(63,185,80,0.15); color:#3FB950; border:1px solid rgba(63,185,80,0.3); font-size:0.7rem; padding:2px 8px; border-radius:12px; font-weight:600;">
+            ✓ WHO CNS 5 Grounded
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if "overlay_chat_history" not in st.session_state:
+        st.session_state.overlay_chat_history = [
+            {
+                "role": "assistant",
+                "content": f"Hello @{username_val}! I am your NeuroScan Medical AI Assistant. How can I assist you with clinical guidelines, treatment protocols, or brain MRI interpretations today?"
+            }
+        ]
+
+    # Quick Prompts
+    st.markdown("<p style='font-size:0.72rem; color:#8B949E; margin-bottom:0.3rem;'>Quick Questions:</p>", unsafe_allow_html=True)
+    prompts = [
+        "Explain my MRI scan report",
+        "What diet & home remedies help?",
+        "How to maintain health daily?",
+        "What questions to ask my doctor?"
+    ]
+
+
+    p_cols = st.columns(4)
+    selected_quick_q = None
+    for i, p in enumerate(prompts):
+        with p_cols[i]:
+            if st.button(p, key=f"overlay_quick_{i}", use_container_width=True):
+                selected_quick_q = p
+
+    # Chat history viewport
+    chat_container = st.container(height=380, border=False)
+    with chat_container:
+        for msg in st.session_state.overlay_chat_history:
+            with st.chat_message(msg["role"], avatar="👨‍⚕️" if msg["role"] == "user" else "🧠"):
+                st.markdown(msg["content"])
+                if msg.get("sources"):
+                    st.caption(f"📚 References: {', '.join(msg['sources'])}")
+
+    chat_input_val = st.chat_input("Ask a clinical or MRI question...", key="overlay_chat_user_input")
+    active_prompt = selected_quick_q or chat_input_val
+
+    if active_prompt:
+        st.session_state.overlay_chat_history.append({"role": "user", "content": active_prompt})
+        with st.spinner("Retrieving medical evidence & scan report..."):
+            active_rep = st.session_state.get("active_diagnostic_report", None)
+            reply = rag_engine.query_medical_rag(
+                user_query=active_prompt,
+                diagnosis_context=st.session_state.get("last_diagnosis", None),
+                tumor_area_cm2=active_rep.get("area_cm2") if active_rep else None,
+                role=user_role,
+                username=st.session_state.get("username", "user"),
+                report_data=active_rep
+            )
+
+
+        st.session_state.overlay_chat_history.append({
+            "role": "assistant",
+            "content": reply["answer"],
+            "sources": reply.get("sources", [])
+        })
+        st.rerun()
+
+
+
+def render_floating_copilot_launcher():
+    """Renders sleek floating launcher in bottom-right corner for overlay chatbot."""
+    st.markdown("""
+    <style>
+    div[data-testid="stPopover"], .floating-copilot-anchor {
+        position: fixed !important;
+        bottom: 24px !important;
+        right: 28px !important;
+        z-index: 999999 !important;
+    }
+    .floating-copilot-anchor button {
+        background: linear-gradient(135deg, #0F6E56, #00D4FF) !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 50px !important;
+        padding: 10px 18px !important;
+        font-weight: 700 !important;
+        font-size: 13px !important;
+        box-shadow: 0 4px 18px rgba(0,212,255,0.35) !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        cursor: pointer !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    }
+    .floating-copilot-anchor button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 24px rgba(0,212,255,0.5) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    f_col = st.container()
+    with f_col:
+        st.markdown("<div class='floating-copilot-anchor'>", unsafe_allow_html=True)
+        if st.button("💬 Ask AI Copilot", key="floating_copilot_trigger_btn"):
+            open_copilot_overlay_dialog()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # APP ROUTER
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3424,9 +3978,13 @@ else:  # "dashboard"
             render_admin_dashboard()
         elif current_role == "patient":
             render_patient_dashboard()
+            # Floating Overlay Copilot is exclusively active for Patient Care
+            render_floating_copilot_launcher()
         else:
             render_dashboard_page()
     else:
         st.session_state.page = "login"
         st.rerun()
+
+
 

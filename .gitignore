@@ -42,10 +42,12 @@ desktop.ini
 *.tmp
 *.temp
 
-# -- Environment variables ------------------------------------
+# -- Environment variables & secrets --------------------------
 .env
 .env.*
 secrets.toml
+.streamlit/secrets.toml
+
 
 # -- Build artefacts ------------------------------------------
 dist/

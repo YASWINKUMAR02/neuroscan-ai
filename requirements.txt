@@ -23,4 +23,11 @@ reportlab>=4.0.0
 pymysql>=1.1.0
 cryptography>=41.0.0
 
+# Cloud Storage (AWS S3) & Secrets
+boto3>=1.34.0
+python-dotenv>=1.0.0
 
+# Medical RAG & AI Copilot
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+groq>=0.9.0

@@ -181,11 +181,21 @@ def init_db():
                 tumor_area_cm2 FLOAT,
                 pdf_blob LONGBLOB,
                 pdf_filename VARCHAR(255),
+                s3_key VARCHAR(255),
+                s3_url TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (scan_id) REFERENCES scans (id) ON DELETE SET NULL,
                 FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE SET NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             """)
+
+            # Safe auto-migration for existing databases
+            try:
+                cursor.execute("ALTER TABLE reports ADD COLUMN s3_key VARCHAR(255);")
+                cursor.execute("ALTER TABLE reports ADD COLUMN s3_url TEXT;")
+            except Exception:
+                pass
+
 
 
             # 6. Activity & Audit Logs Table (tracks logins, scans, downloads)
@@ -294,11 +304,21 @@ def init_db():
             tumor_area_cm2 REAL,
             pdf_blob BLOB,
             pdf_filename TEXT,
+            s3_key TEXT,
+            s3_url TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
+        try:
+            cursor.execute("ALTER TABLE reports ADD COLUMN s3_key TEXT;")
+            cursor.execute("ALTER TABLE reports ADD COLUMN s3_url TEXT;")
+            conn.commit()
+        except Exception:
+            pass
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS activity_logs (
+
 
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL,
@@ -638,29 +658,31 @@ def save_report(
     patient_gender: str = None,
     doctor_username: str = "doctor",
     tumor_area_cm2: float = None,
+    s3_key: str = None,
+    s3_url: str = None,
 ):
-    """Store a generated PDF clinical diagnostic report and its binary blob into database."""
+    """Store a generated PDF clinical diagnostic report, its binary blob, and AWS S3 cloud URL into database."""
     conn, engine = get_db_connection()
     ins_sql = """
     INSERT INTO reports (
         report_code, scan_id, patient_id, patient_name, patient_age, patient_gender,
         doctor_username, predicted_class, confidence, tumor_area_cm2,
-        pdf_blob, pdf_filename
+        pdf_blob, pdf_filename, s3_key, s3_url
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """ if engine == "mysql" else """
     INSERT INTO reports (
         report_code, scan_id, patient_id, patient_name, patient_age, patient_gender,
         doctor_username, predicted_class, confidence, tumor_area_cm2,
-        pdf_blob, pdf_filename
+        pdf_blob, pdf_filename, s3_key, s3_url
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
     params = (
         report_code, scan_id, patient_id, patient_name, patient_age, patient_gender,
         doctor_username, predicted_class, confidence, tumor_area_cm2,
-        pdf_bytes, pdf_filename
+        pdf_bytes, pdf_filename, s3_key, s3_url
     )
 
     try:
@@ -684,23 +706,24 @@ def save_report(
 
 
 def get_all_reports(limit: int = 50):
-    """Retrieve all generated diagnostic reports."""
+    """Retrieve all generated diagnostic reports including AWS S3 cloud links."""
     conn, engine = get_db_connection()
     sql = """
     SELECT id, report_code, scan_id, patient_id, patient_name, patient_age, patient_gender,
-           doctor_username, predicted_class, confidence, tumor_area_cm2, pdf_filename, created_at
+           doctor_username, predicted_class, confidence, tumor_area_cm2, pdf_filename, s3_key, s3_url, created_at
     FROM reports
     ORDER BY id DESC
     LIMIT %s
     """ if engine == "mysql" else """
     SELECT id, report_code, scan_id, patient_id, patient_name, patient_age, patient_gender,
-           doctor_username, predicted_class, confidence, tumor_area_cm2, pdf_filename, created_at
+           doctor_username, predicted_class, confidence, tumor_area_cm2, pdf_filename, s3_key, s3_url, created_at
     FROM reports
     ORDER BY id DESC
     LIMIT ?
     """
 
     if engine == "mysql":
+
         with conn.cursor() as cur:
             cur.execute(sql, (limit,))
             rows = cur.fetchall()
@@ -712,6 +735,7 @@ def get_all_reports(limit: int = 50):
         rows = cur.fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
 
 
 def get_report_pdf_blob(report_id: int):
