@@ -31,7 +31,7 @@ MYSQL_PASSWORD = os.getenv("DB_PASSWORD", "root")
 MYSQL_PORT = int(os.getenv("DB_PORT", 3306))
 MYSQL_DB = os.getenv("DB_NAME", "neuroscan_db")
 
-# SQLite Fallback Path (dynamic relative path)
+# SQLite Fallback Path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SQLITE_DB_PATH = os.path.join(BASE_DIR, "neuroscan.db")
 
