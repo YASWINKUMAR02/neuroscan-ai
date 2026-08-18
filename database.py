@@ -297,6 +297,8 @@ def init_db():
                 compactness FLOAT,
                 solidity FLOAT,
                 shape_label VARCHAR(50),
+                s3_key VARCHAR(255),
+                s3_url TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE SET NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -345,6 +347,12 @@ def init_db():
             try:
                 cursor.execute("ALTER TABLE reports ADD COLUMN s3_key VARCHAR(255);")
                 cursor.execute("ALTER TABLE reports ADD COLUMN s3_url TEXT;")
+            except Exception:
+                pass
+
+            try:
+                cursor.execute("ALTER TABLE scans ADD COLUMN s3_key VARCHAR(255);")
+                cursor.execute("ALTER TABLE scans ADD COLUMN s3_url TEXT;")
             except Exception:
                 pass
 
@@ -425,6 +433,8 @@ def init_db():
             compactness REAL,
             solidity REAL,
             shape_label TEXT,
+            s3_key TEXT,
+            s3_url TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
@@ -464,6 +474,13 @@ def init_db():
         try:
             cursor.execute("ALTER TABLE reports ADD COLUMN s3_key TEXT;")
             cursor.execute("ALTER TABLE reports ADD COLUMN s3_url TEXT;")
+            conn.commit()
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE scans ADD COLUMN s3_key TEXT;")
+            cursor.execute("ALTER TABLE scans ADD COLUMN s3_url TEXT;")
             conn.commit()
         except Exception:
             pass
@@ -787,6 +804,8 @@ def save_scan_record(
     probabilities_dict: dict = None,
     area_data: dict = None,
     shape_data: dict = None,
+    s3_key: str = None,
+    s3_url: str = None,
 ):
     """Save an MRI scan diagnostic inference record to database."""
     conn, engine = get_db_connection()
@@ -807,24 +826,24 @@ def save_scan_record(
         patient_id, doctor_username, filename, is_valid_mri, guardrail_reason,
         predicted_class, confidence, probabilities_json,
         tumor_area_cm2, tumor_area_mm2, tumor_pixel_count, coverage_pct,
-        circularity, compactness, solidity, shape_label
+        circularity, compactness, solidity, shape_label, s3_key, s3_url
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """ if engine == "mysql" else """
     INSERT INTO scans (
         patient_id, doctor_username, filename, is_valid_mri, guardrail_reason,
         predicted_class, confidence, probabilities_json,
         tumor_area_cm2, tumor_area_mm2, tumor_pixel_count, coverage_pct,
-        circularity, compactness, solidity, shape_label
+        circularity, compactness, solidity, shape_label, s3_key, s3_url
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
     params = (
         patient_id, doctor_username, filename, is_valid_mri, guardrail_reason,
         predicted_class, confidence, probs_json,
         area_cm2, area_mm2, px_count, cov_pct,
-        circ, comp, sol, shape_lbl
+        circ, comp, sol, shape_lbl, s3_key, s3_url
     )
 
     if engine == "mysql":
@@ -840,6 +859,126 @@ def save_scan_record(
         scan_id = cur.lastrowid
         conn.close()
         return scan_id
+
+
+def get_latest_scan_for_patient(patient_id: int = None, patient_name: str = None):
+    """Retrieve the most recent scan record for a specific patient."""
+    conn, engine = get_db_connection()
+    if not patient_id and not patient_name:
+        return None
+
+    if patient_id:
+        sql = """
+        SELECT s.*, p.full_name as patient_name, p.age as patient_age, p.gender as patient_gender, p.mrn
+        FROM scans s
+        LEFT JOIN patients p ON s.patient_id = p.id
+        WHERE s.patient_id = %s
+        ORDER BY s.id DESC
+        LIMIT 1
+        """ if engine == "mysql" else """
+        SELECT s.*, p.full_name as patient_name, p.age as patient_age, p.gender as patient_gender, p.mrn
+        FROM scans s
+        LEFT JOIN patients p ON s.patient_id = p.id
+        WHERE s.patient_id = ?
+        ORDER BY s.id DESC
+        LIMIT 1
+        """
+        params = (patient_id,)
+    else:
+        sql = """
+        SELECT s.*, p.full_name as patient_name, p.age as patient_age, p.gender as patient_gender, p.mrn
+        FROM scans s
+        LEFT JOIN patients p ON s.patient_id = p.id
+        WHERE p.full_name = %s
+        ORDER BY s.id DESC
+        LIMIT 1
+        """ if engine == "mysql" else """
+        SELECT s.*, p.full_name as patient_name, p.age as patient_age, p.gender as patient_gender, p.mrn
+        FROM scans s
+        LEFT JOIN patients p ON s.patient_id = p.id
+        WHERE p.full_name = ?
+        ORDER BY s.id DESC
+        LIMIT 1
+        """
+        params = (patient_name,)
+
+    try:
+        if engine == "mysql":
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                row = cur.fetchone()
+            conn.close()
+            return row
+        else:
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            conn.close()
+            return dict(row) if row else None
+    except Exception as e:
+        print(f"[GET LATEST SCAN ERROR]: {e}")
+        conn.close()
+        return None
+
+
+def get_all_scans_for_patient(patient_id: int = None, patient_name: str = None, limit: int = 20):
+    """Retrieve all scan records for a specific patient."""
+    conn, engine = get_db_connection()
+    if not patient_id and not patient_name:
+        return []
+
+    if patient_id:
+        sql = """
+        SELECT s.*, p.full_name as patient_name, p.age as patient_age, p.gender as patient_gender, p.mrn
+        FROM scans s
+        LEFT JOIN patients p ON s.patient_id = p.id
+        WHERE s.patient_id = %s
+        ORDER BY s.id DESC
+        LIMIT %s
+        """ if engine == "mysql" else """
+        SELECT s.*, p.full_name as patient_name, p.age as patient_age, p.gender as patient_gender, p.mrn
+        FROM scans s
+        LEFT JOIN patients p ON s.patient_id = p.id
+        WHERE s.patient_id = ?
+        ORDER BY s.id DESC
+        LIMIT ?
+        """
+        params = (patient_id, limit)
+    else:
+        sql = """
+        SELECT s.*, p.full_name as patient_name, p.age as patient_age, p.gender as patient_gender, p.mrn
+        FROM scans s
+        LEFT JOIN patients p ON s.patient_id = p.id
+        WHERE p.full_name = %s
+        ORDER BY s.id DESC
+        LIMIT %s
+        """ if engine == "mysql" else """
+        SELECT s.*, p.full_name as patient_name, p.age as patient_age, p.gender as patient_gender, p.mrn
+        FROM scans s
+        LEFT JOIN patients p ON s.patient_id = p.id
+        WHERE p.full_name = ?
+        ORDER BY s.id DESC
+        LIMIT ?
+        """
+        params = (patient_name, limit)
+
+    try:
+        if engine == "mysql":
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+            conn.close()
+            return rows
+        else:
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            conn.close()
+            return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[GET ALL SCANS ERROR]: {e}")
+        conn.close()
+        return []
 
 
 def get_recent_scans(limit: int = 25):

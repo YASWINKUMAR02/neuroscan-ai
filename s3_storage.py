@@ -122,35 +122,129 @@ def upload_pdf_to_s3(pdf_bytes: bytes, filename: str, folder: str = "reports") -
         return None, None
 
 
-def upload_mri_to_s3(pil_image, filename: str, folder: str = "scans") -> tuple:
+def upload_mri_to_s3(image_or_bytes, filename: str, patient_name: str = "", folder: str = "scans") -> tuple:
     """
-    Upload an MRI scan image to S3.
+    Upload an MRI scan image or NIfTI file to S3.
+    Supports PIL Image objects or raw bytes.
     Returns: (s3_key, presigned_url) or (None, None) on failure.
     """
     s3_client, bucket_name = get_s3_client()
-    if not s3_client or not bucket_name or pil_image is None:
+    if not s3_client or not bucket_name or image_or_bytes is None:
         return None, None
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    p_tag = "".join(c for c in (patient_name or "").lower() if c.isalnum() or c == "_")
+    prefix = f"{p_tag}_" if p_tag else ""
     clean_fn = "".join(c for c in filename if c.isalnum() or c in ("_", "-", "."))
-    s3_key = f"{folder}/{timestamp}_{clean_fn}"
+    s3_key = f"{folder}/{timestamp}_{prefix}{clean_fn}"
 
     try:
-        buffer = io.BytesIO()
-        pil_image.save(buffer, format="PNG")
-        buffer.seek(0)
+        if isinstance(image_or_bytes, (bytes, bytearray)):
+            body_data = bytes(image_or_bytes)
+            content_type = "application/gzip" if clean_fn.endswith(".gz") else ("application/octet-stream" if clean_fn.endswith(".nii") else "image/png")
+        else:
+            buffer = io.BytesIO()
+            image_or_bytes.save(buffer, format="PNG")
+            body_data = buffer.getvalue()
+            content_type = "image/png"
 
         s3_client.put_object(
             Bucket=bucket_name,
             Key=s3_key,
-            Body=buffer.getvalue(),
-            ContentType="image/png"
+            Body=body_data,
+            ContentType=content_type
         )
         url = generate_presigned_url(s3_key, expires_in=86400)
         return s3_key, url
     except Exception as e:
         print(f"[S3 Scan Upload Error]: {e}")
         return None, None
+
+
+def download_bytes_from_s3(s3_key: str):
+    """
+    Download raw object bytes from S3.
+    """
+    if not s3_key:
+        return None
+    s3_client, bucket_name = get_s3_client()
+    if s3_client and bucket_name:
+        try:
+            resp = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+            return resp["Body"].read()
+        except Exception as e:
+            print(f"[S3 Download Bytes Error via boto3]: {e}")
+
+    # Fallback via presigned URL
+    try:
+        import urllib.request
+        url = generate_presigned_url(s3_key)
+        if url:
+            with urllib.request.urlopen(url, timeout=15) as response:
+                return response.read()
+    except Exception as e:
+        print(f"[S3 Download Bytes Error via URL]: {e}")
+    return None
+
+
+def download_mri_from_s3(s3_key: str):
+    """
+    Download an MRI scan image from S3 and return as a PIL Image.
+    """
+    raw_data = download_bytes_from_s3(s3_key)
+    if raw_data:
+        try:
+            return Image.open(io.BytesIO(raw_data)).convert("RGB")
+        except Exception as e:
+            print(f"[PIL Image Load Error from S3 bytes]: {e}")
+    return None
+
+
+def find_patient_scans_in_s3(patient_name: str = "", mrn: str = "") -> list:
+    """
+    Search S3 scans/ folder for MRI images belonging to a patient.
+    Returns a list of dicts with {s3_key, filename, last_modified, size, s3_url}.
+    """
+    s3_client, bucket_name = get_s3_client()
+    if not s3_client or not bucket_name:
+        return []
+
+    try:
+        resp = s3_client.list_objects_v2(Bucket=bucket_name, Prefix="scans/")
+        if "Contents" not in resp:
+            return []
+
+        results = []
+        p_clean = patient_name.lower().replace(" ", "").replace("_", "") if patient_name else ""
+        mrn_clean = mrn.lower().replace("-", "") if mrn else ""
+
+        for obj in resp["Contents"]:
+            k = obj["Key"]
+            k_lower = k.lower().replace(" ", "").replace("_", "").replace("-", "")
+            match = False
+            if p_clean and p_clean in k_lower:
+                match = True
+            elif mrn_clean and mrn_clean in k_lower:
+                match = True
+            elif not p_clean and not mrn_clean:
+                match = True
+
+            if match:
+                url = generate_presigned_url(k)
+                results.append({
+                    "s3_key": k,
+                    "filename": k.split("/")[-1],
+                    "last_modified": obj["LastModified"],
+                    "size": obj["Size"],
+                    "s3_url": url
+                })
+
+        # Sort by most recent
+        results.sort(key=lambda x: x["last_modified"], reverse=True)
+        return results
+    except Exception as e:
+        print(f"[S3 List Scans Error]: {e}")
+        return []
 
 
 def generate_presigned_url(s3_key: str, expires_in: int = 86400) -> str:

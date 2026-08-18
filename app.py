@@ -2769,7 +2769,104 @@ def render_dashboard_page():
                 p_age = matched_pat["age"]
                 p_gender = matched_pat["gender"]
                 st.markdown(f"<span style='font-size:0.75rem; color:#3FB950;'>✓ Selected: <b>{p_name}</b> ({matched_pat.get('mrn', 'MRN')})</span>", unsafe_allow_html=True)
+
+                # Check if patient selection changed
+                curr_pat_id = matched_pat["id"]
+                last_pat_id = st.session_state.get("_curr_selected_pat_id")
+                if last_pat_id != curr_pat_id:
+                    st.session_state["_curr_selected_pat_id"] = curr_pat_id
+                    st.session_state.pop("active_s3_scan_key", None)
+                    st.session_state.pop("active_s3_scan_fn", None)
+
+                # Collect all existing patient MRI scans in Database and AWS S3
+                db_scans = db.get_all_scans_for_patient(patient_id=matched_pat["id"]) or []
+                if not db_scans and matched_pat.get("full_name"):
+                    db_scans = db.get_all_scans_for_patient(patient_name=matched_pat["full_name"]) or []
+                s3_found_scans = s3.find_patient_scans_in_s3(patient_name=matched_pat["full_name"], mrn=matched_pat.get("mrn", "")) or []
+                all_s3_scans = s3.find_patient_scans_in_s3() or []
+
+                found_scans_dict = {}
+                for sc in db_scans:
+                    s_key = sc.get("s3_key")
+                    s_fn = sc.get("filename") or "MRI_Scan.png"
+                    if not s_key and s_fn:
+                        for s3_item in all_s3_scans:
+                            if s_fn.lower() in s3_item["filename"].lower() or s3_item["filename"].lower().endswith(s_fn.lower()):
+                                s_key = s3_item["s3_key"]
+                                break
+                    if s_key:
+                        found_scans_dict[s_key] = {
+                            "s3_key": s_key,
+                            "filename": s_fn,
+                            "created_at": sc.get("created_at"),
+                            "diagnosis": sc.get("predicted_class", ""),
+                            "confidence": sc.get("confidence"),
+                        }
+
+                for s3_sc in s3_found_scans:
+                    s_key = s3_sc["s3_key"]
+                    if s_key not in found_scans_dict:
+                        found_scans_dict[s_key] = {
+                            "s3_key": s_key,
+                            "filename": s3_sc["filename"],
+                            "created_at": s3_sc.get("last_modified"),
+                            "diagnosis": "",
+                            "confidence": None,
+                        }
+
+                patient_scans_list = list(found_scans_dict.values())
+
+                if patient_scans_list:
+                    if len(patient_scans_list) > 1:
+                        scan_labels = []
+                        for idx_s, sc in enumerate(patient_scans_list):
+                            dt_str = sc["created_at"].strftime("%Y-%m-%d %H:%M") if hasattr(sc["created_at"], "strftime") else str(sc["created_at"] or "")
+                            d_lbl = f" · {sc['diagnosis'].upper()}" if sc.get('diagnosis') else ""
+                            scan_labels.append(f"Scan #{idx_s + 1}: {sc['filename']} ({dt_str}{d_lbl})")
+
+                        chosen_scan_idx = st.selectbox(
+                            "Select Patient Scan from Cloud",
+                            range(len(patient_scans_list)),
+                            format_func=lambda i: scan_labels[i],
+                            key=f"scan_pick_{matched_pat['id']}",
+                        )
+                        chosen_scan = patient_scans_list[chosen_scan_idx]
+                    else:
+                        chosen_scan = patient_scans_list[0]
+
+                    st.session_state["active_s3_scan_key"] = chosen_scan["s3_key"]
+                    st.session_state["active_s3_scan_fn"] = chosen_scan["filename"]
+                    st.session_state["active_s3_pat_id"] = matched_pat["id"]
+
+                    st.markdown(f"""
+                    <div style="background:rgba(14,165,233,0.08); border:1px solid rgba(14,165,233,0.25); border-radius:6px; padding:8px 10px; margin-top:8px;">
+                      <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-family:'JetBrains Mono', monospace; font-size:10.5px; font-weight:700; color:#38BDF8; letter-spacing:0.06em; text-transform:uppercase;">
+                          ☁️ AWS S3 Scan Loaded
+                        </span>
+                        <span style="font-size:9.5px; color:#34D399; font-weight:600; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); border-radius:3px; padding:1px 5px;">
+                          Active
+                        </span>
+                      </div>
+                      <div style="font-size:11.5px; color:#CBD5E1; margin:4px 0 2px 0; word-break:break-all;">
+                        <b>Scan:</b> <code>{chosen_scan['filename']}</code>
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.session_state.pop("active_s3_scan_key", None)
+                    st.session_state.pop("active_s3_scan_fn", None)
+                    st.markdown(f"""
+                    <div style="background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.25); border-radius:6px; padding:8px 10px; margin-top:8px;">
+                      <div style="font-size:11px; color:#FDE047;">
+                        ℹ️ <b>No prior MRI scans found in AWS S3 for {p_name}.</b><br/>Upload a scan below to analyze &amp; store in cloud.
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
+                st.session_state.pop("_curr_selected_pat_id", None)
+                st.session_state.pop("active_s3_scan_key", None)
+                st.session_state.pop("active_s3_scan_fn", None)
                 p_name = st.text_input(
                     "Patient Name",
                     value=st.session_state.patient_name,
@@ -2846,7 +2943,7 @@ def render_dashboard_page():
 
 
 
-    # Automatic Pipeline Execution
+    # Automatic Pipeline Execution (Local Upload OR Fetched from AWS S3)
     is_3d_nifti = False
     vol_3d = None
     mask_3d = None
@@ -2870,13 +2967,38 @@ def render_dashboard_page():
     prob_map = None
     gradcam_img = None
     gradcam_raw = None
+    scan_source_label = ""
+
+    # Check if a scan is provided via live file uploader OR via S3 fetch
+    active_s3_key = st.session_state.get("active_s3_scan_key")
 
     if uploaded:
+        # Clear active S3 state if doctor explicitly uploads a new file
+        st.session_state.pop("active_s3_scan_key", None)
+        scan_source_label = uploaded.name
         is_3d_nifti = uploaded.name.lower().endswith((".nii", ".nii.gz"))
-        if is_3d_nifti:
-            step = 1
-            try:
-                vol_3d, voxel_spacing, nii_meta = volume_engine.load_nifti_from_bytes(uploaded.getvalue(), uploaded.name)
+        if not is_3d_nifti:
+            pil_img = Image.open(uploaded)
+    elif active_s3_key:
+        scan_source_label = st.session_state.get("active_s3_scan_fn", "s3_mri_scan.png")
+        is_3d_nifti = scan_source_label.lower().endswith((".nii", ".nii.gz"))
+        if not is_3d_nifti:
+            with st.spinner(f"Downloading MRI scan '{scan_source_label}' from AWS S3..."):
+                pil_img = s3.download_mri_from_s3(active_s3_key)
+
+    if (uploaded or active_s3_key) and is_3d_nifti:
+        step = 1
+        try:
+            if uploaded:
+                nii_bytes = uploaded.getvalue()
+                nii_fn = uploaded.name
+            else:
+                with st.spinner(f"Downloading 3D NIfTI volume '{scan_source_label}' from AWS S3..."):
+                    nii_bytes = s3.download_bytes_from_s3(active_s3_key)
+                nii_fn = scan_source_label
+
+            if nii_bytes:
+                vol_3d, voxel_spacing, nii_meta = volume_engine.load_nifti_from_bytes(nii_bytes, nii_fn)
                 is_mri = True
                 step = 3
                 if seg_model:
@@ -2901,33 +3023,37 @@ def render_dashboard_page():
                     "area_mm2": seg_3d_res["tumor_volume_mm3"] if seg_3d_res else None,
                     "tumor_pixels": seg_3d_res["tumor_voxel_count"] if seg_3d_res else None,
                     "shape_label": "3D Volumetric Mass",
-                    "scan_filename": uploaded.name,
+                    "scan_filename": scan_source_label,
                     "is_3d_nifti": True
                 }
                 st.session_state["active_diagnostic_report"] = active_report
                 st.session_state["last_diagnosis"] = diag_name
 
-                # Log scan record to database
-                try:
-                    patient_id = db.create_or_get_patient(
-                        full_name=st.session_state.patient_name,
-                        age=st.session_state.patient_age,
-                        gender=st.session_state.patient_gender
-                    )
-                    db.save_scan_record(
-                        filename=uploaded.name,
-                        is_valid_mri=True,
-                        guardrail_reason="3D NIfTI Structural Brain Volume",
-                        patient_id=patient_id,
-                        doctor_username=st.session_state.username,
-                        predicted_class="glioma" if (seg_3d_res and seg_3d_res["has_tumor"]) else "notumor",
-                        confidence=98.5 if (seg_3d_res and seg_3d_res["has_tumor"]) else 99.0,
-                        probabilities_dict={"glioma": 0.985, "notumor": 0.015} if (seg_3d_res and seg_3d_res["has_tumor"]) else {"notumor": 0.99, "glioma": 0.01},
-                        area_data={"area_cm2": seg_3d_res["tumor_volume_cm3"], "area_mm2": seg_3d_res["tumor_volume_mm3"], "pixel_count": seg_3d_res["tumor_voxel_count"]} if seg_3d_res else None,
-                        shape_data={"shape_label": "3D Volumetric Mass"}
-                    )
-                except Exception:
-                    pass
+                # Log scan record to database if newly uploaded
+                if uploaded:
+                    try:
+                        patient_id = db.create_or_get_patient(
+                            full_name=st.session_state.patient_name,
+                            age=st.session_state.patient_age,
+                            gender=st.session_state.patient_gender
+                        )
+                        s3_key_nii, s3_url_nii = s3.upload_mri_to_s3(nii_bytes, uploaded.name, patient_name=st.session_state.patient_name)
+                        db.save_scan_record(
+                            filename=uploaded.name,
+                            is_valid_mri=True,
+                            guardrail_reason="3D NIfTI Structural Brain Volume",
+                            patient_id=patient_id,
+                            doctor_username=st.session_state.username,
+                            predicted_class="glioma" if (seg_3d_res and seg_3d_res["has_tumor"]) else "notumor",
+                            confidence=98.5 if (seg_3d_res and seg_3d_res["has_tumor"]) else 99.0,
+                            probabilities_dict={"glioma": 0.985, "notumor": 0.015} if (seg_3d_res and seg_3d_res["has_tumor"]) else {"notumor": 0.99, "glioma": 0.01},
+                            area_data={"area_cm2": seg_3d_res["tumor_volume_cm3"], "area_mm2": seg_3d_res["tumor_volume_mm3"], "pixel_count": seg_3d_res["tumor_voxel_count"]} if seg_3d_res else None,
+                            shape_data={"shape_label": "3D Volumetric Mass"},
+                            s3_key=s3_key_nii,
+                            s3_url=s3_url_nii
+                        )
+                    except Exception:
+                        pass
 
                 # Generate 3D Volumetric PDF Report
                 if REPORTLAB_AVAILABLE and seg_3d_res is not None and vol_3d is not None and mask_3d is not None:
@@ -2940,59 +3066,60 @@ def render_dashboard_page():
                             seg_3d_res=seg_3d_res,
                             vol_3d=vol_3d,
                             mask_3d=mask_3d,
-                            filename=uploaded.name
+                            filename=scan_source_label
                         )
                     except Exception as exc:
                         pdf_report_bytes = None
                         pdf_gen_error = str(exc)
 
-            except Exception as e:
-                st.error(f"Error reading 3D NIfTI scan: {e}")
-                db.log_error(
-                    error_type="NIFTI_PROCESS_ERROR",
-                    severity="ERROR",
-                    message=str(e),
-                    stack_trace=traceback.format_exc(),
-                    component="volume_engine",
-                    username=st.session_state.username,
-                    filename=uploaded.name
-                )
-        else:
-            # 2D Image Pipeline
-            step = 1
-            pil_img = Image.open(uploaded)
-            is_mri, mri_reason = is_mri_image(pil_img, guardrail_model)
-            if is_mri:
-                step = 2
-                predicted_class, probs = predict_class(clf_model, pil_img)
-                has_tumor = predicted_class in TUMOR_CLASSES
-                # Grad-CAM — always run for any valid MRI
-                try:
-                    class_idx   = CLASSES.index(predicted_class)
-                    cam         = generate_gradcam(clf_model, pil_img, class_idx)
-                    gradcam_img, gradcam_raw = overlay_gradcam(pil_img, cam, alpha=0.5)
-                except Exception:
-                    gradcam_img, gradcam_raw = None, None
-                step = 3
-                if has_tumor and seg_model:
-                    binary_mask, prob_map = predict_segmentation(seg_model, pil_img)
-                    overlay_img = overlay_mask_on_image(pil_img, binary_mask, alpha=0.45)
-                    px_count, total_px, cov_pct, area_mm2, area_cm2 = compute_tumor_area(binary_mask, pil_img)
-                    area_data = {
-                        "pixel_count": px_count,
-                        "total_pixels": total_px,
-                        "coverage_pct": cov_pct,
-                        "area_mm2": area_mm2,
-                        "area_cm2": area_cm2
-                    }
-                    shape_data = compute_shape_analysis(binary_mask)
-                    if prob_map is not None:
-                        conf_data = compute_confidence_stats(prob_map, binary_mask)
-                    step = 4
-                else:
-                    step = 4 # Completed (no tumor skips segmentation)
+        except Exception as e:
+            st.error(f"Error reading 3D NIfTI scan: {e}")
+            db.log_error(
+                error_type="NIFTI_PROCESS_ERROR",
+                severity="ERROR",
+                message=str(e),
+                stack_trace=traceback.format_exc(),
+                component="volume_engine",
+                username=st.session_state.username,
+                filename=scan_source_label
+            )
+    elif pil_img is not None:
+        # 2D Image Pipeline (Direct Live Upload OR Cloud Fetched from AWS S3)
+        step = 1
+        is_mri, mri_reason = is_mri_image(pil_img, guardrail_model)
+        if is_mri:
+            step = 2
+            predicted_class, probs = predict_class(clf_model, pil_img)
+            has_tumor = predicted_class in TUMOR_CLASSES
+            # Grad-CAM — always run for any valid MRI
+            try:
+                class_idx   = CLASSES.index(predicted_class)
+                cam         = generate_gradcam(clf_model, pil_img, class_idx)
+                gradcam_img, gradcam_raw = overlay_gradcam(pil_img, cam, alpha=0.5)
+            except Exception:
+                gradcam_img, gradcam_raw = None, None
+            step = 3
+            if has_tumor and seg_model:
+                binary_mask, prob_map = predict_segmentation(seg_model, pil_img)
+                overlay_img = overlay_mask_on_image(pil_img, binary_mask, alpha=0.45)
+                px_count, total_px, cov_pct, area_mm2, area_cm2 = compute_tumor_area(binary_mask, pil_img)
+                area_data = {
+                    "pixel_count": px_count,
+                    "total_pixels": total_px,
+                    "coverage_pct": cov_pct,
+                    "area_mm2": area_mm2,
+                    "area_cm2": area_cm2
+                }
+                shape_data = compute_shape_analysis(binary_mask)
+                if prob_map is not None:
+                    conf_data = compute_confidence_stats(prob_map, binary_mask)
+                step = 4
+            else:
+                step = 4 # Completed (no tumor skips segmentation)
 
-                # Save scan record to database
+            # Upload to S3 & DB if newly uploaded
+            if uploaded:
+                scan_s3_key, scan_s3_url = s3.upload_mri_to_s3(pil_img, uploaded.name, patient_name=st.session_state.patient_name)
                 try:
                     patient_id = db.create_or_get_patient(
                         full_name=st.session_state.patient_name,
@@ -3000,7 +3127,7 @@ def render_dashboard_page():
                         gender=st.session_state.patient_gender
                     )
                     db.save_scan_record(
-                        filename=uploaded.name,
+                        filename=scan_source_label,
                         is_valid_mri=True,
                         guardrail_reason=mri_reason,
                         patient_id=patient_id,
@@ -3009,7 +3136,9 @@ def render_dashboard_page():
                         confidence=float(probs[CLASSES.index(predicted_class)] * 100),
                         probabilities_dict={c: float(p) for c, p in zip(CLASSES, probs)},
                         area_data=area_data,
-                        shape_data=shape_data
+                        shape_data=shape_data,
+                        s3_key=scan_s3_key,
+                        s3_url=scan_s3_url
                     )
                 except Exception as exc:
                     db.log_error(
@@ -3019,37 +3148,33 @@ def render_dashboard_page():
                         stack_trace=traceback.format_exc(),
                         component="database",
                         username=st.session_state.username,
-                        filename=uploaded.name
+                        filename=scan_source_label
                     )
 
-                # Generate PDF diagnostic report in memory & store in database
-                if REPORTLAB_AVAILABLE and pil_img is not None:
-                    try:
-                        pdf_report_bytes = generate_clinical_pdf_report(
-                            patient_name=st.session_state.patient_name,
-                            patient_age=st.session_state.patient_age,
-                            patient_gender=st.session_state.patient_gender,
-                            username=st.session_state.username,
-                            predicted_class=predicted_class,
-                            probs=probs,
-                            classes=CLASSES,
-                            pil_img=pil_img,
-                            overlay_img=overlay_img,
-                            gradcam_img=gradcam_img,
-                            area_data=area_data,
-                            shape_data=shape_data,
-                            conf_data=conf_data,
-                        )
-
-                        # Store Report in S3 & Database
+            # Generate PDF diagnostic report in memory
+            if REPORTLAB_AVAILABLE and pil_img is not None:
+                try:
+                    pdf_report_bytes = generate_clinical_pdf_report(
+                        patient_name=st.session_state.patient_name,
+                        patient_age=st.session_state.patient_age,
+                        patient_gender=st.session_state.patient_gender,
+                        username=st.session_state.username,
+                        predicted_class=predicted_class,
+                        probs=probs,
+                        classes=CLASSES,
+                        pil_img=pil_img,
+                        overlay_img=overlay_img,
+                        gradcam_img=gradcam_img,
+                        area_data=area_data,
+                        shape_data=shape_data,
+                        conf_data=conf_data,
+                    )
+                    if uploaded:
+                        # Store Report in S3 & Database for new uploads
                         clean_name = "".join(c for c in (st.session_state.patient_name or "Patient") if c.isalnum() or c in ('_', '-'))
                         rep_code = f"RPT-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
                         rep_fname = f"NeuroScan_Report_{clean_name}_{datetime.datetime.now().strftime('%Y%m%d')}.pdf"
-
-                        # Upload PDF report & scan to AWS S3
-                        s3_key, s3_url = s3.upload_pdf_to_s3(pdf_report_bytes, rep_fname)
-                        s3.upload_mri_to_s3(pil_img, uploaded.name)
-
+                        s3_rep_key, s3_rep_url = s3.upload_pdf_to_s3(pdf_report_bytes, rep_fname)
                         db.save_report(
                             report_code=rep_code,
                             patient_name=st.session_state.patient_name or "Anonymous Patient",
@@ -3057,14 +3182,13 @@ def render_dashboard_page():
                             confidence=float(probs[CLASSES.index(predicted_class)] * 100),
                             pdf_bytes=pdf_report_bytes,
                             pdf_filename=rep_fname,
-                            scan_id=scan_id if 'scan_id' in locals() else None,
                             patient_id=patient_id if 'patient_id' in locals() else None,
                             patient_age=st.session_state.patient_age,
                             patient_gender=st.session_state.patient_gender,
                             doctor_username=st.session_state.username,
                             tumor_area_cm2=area_data['area_cm2'] if area_data else None,
-                            s3_key=s3_key,
-                            s3_url=s3_url
+                            s3_key=s3_rep_key,
+                            s3_url=s3_rep_url
                         )
                         db.log_activity(
                             username=st.session_state.username or "doctor",
@@ -3073,31 +3197,28 @@ def render_dashboard_page():
                             details=f"Generated clinical PDF report '{rep_code}' for patient '{st.session_state.patient_name or 'Anonymous'}' (Stored in S3 & DB)",
                             status="SUCCESS"
                         )
-
-
-                    except Exception as exc:
-                        pdf_gen_error = str(exc)
-                        db.log_error(
-                            error_type="PDF_GEN_ERROR",
-                            severity="ERROR",
-                            message=str(exc),
-                            stack_trace=traceback.format_exc(),
-                            component="pdf_report",
-                            username=st.session_state.username,
-                            filename=uploaded.name
-                        )
-                elif not REPORTLAB_AVAILABLE:
-                    pdf_gen_error = "ReportLab library not installed. Please run `pip install reportlab`."
-
-            else:
-                db.log_error(
-                    error_type="GUARDRAIL_REJECTED",
-                    severity="WARNING",
-                    message=f"Guardrail rejected scan: {mri_reason}",
-                    component="guardrail",
-                    username=st.session_state.username,
-                    filename=uploaded.name
-                )
+                except Exception as exc:
+                    pdf_gen_error = str(exc)
+                    db.log_error(
+                        error_type="PDF_GEN_ERROR",
+                        severity="ERROR",
+                        message=str(exc),
+                        stack_trace=traceback.format_exc(),
+                        component="pdf_report",
+                        username=st.session_state.username,
+                        filename=scan_source_label
+                    )
+            elif not REPORTLAB_AVAILABLE:
+                pdf_gen_error = "ReportLab library not installed. Please run `pip install reportlab`."
+        else:
+            db.log_error(
+                error_type="GUARDRAIL_REJECTED",
+                severity="WARNING",
+                message=f"Guardrail rejected scan: {mri_reason}",
+                component="guardrail",
+                username=st.session_state.username,
+                filename=scan_source_label
+            )
 
 
 
@@ -3243,14 +3364,14 @@ def render_dashboard_page():
 
             orig_sel, mask_sel, ov_sel = volume_engine.render_slice_triplet(vol_3d, mask_3d, selected_z)
             with st.container(border=True):
-                s1, s2, s3 = st.columns(3)
-                with s1:
+                sl_col1, sl_col2, sl_col3 = st.columns(3)
+                with sl_col1:
                     st.markdown(f"<p style='text-align:center; font-weight:600; font-size:0.85rem; margin-bottom:0.3rem; color:#E6EDF3;'>Original MRI (z={selected_z})</p>", unsafe_allow_html=True)
                     st.image(orig_sel, use_container_width=True)
-                with s2:
+                with sl_col2:
                     st.markdown("<p style='text-align:center; font-weight:600; font-size:0.85rem; margin-bottom:0.3rem; color:#E6EDF3;'>Predicted Tumor Mask</p>", unsafe_allow_html=True)
                     st.image(mask_sel, use_container_width=True)
-                with s3:
+                with sl_col3:
                     st.markdown("<p style='text-align:center; font-weight:600; font-size:0.85rem; margin-bottom:0.3rem; color:#E6EDF3;'>Overlay</p>", unsafe_allow_html=True)
                     st.image(ov_sel, use_container_width=True)
 
@@ -3464,23 +3585,23 @@ def render_dashboard_page():
                 st.markdown(f"""
                 <div class="viewport-label">
                     <span>Dimensions: {w} × {h} px</span>
-                    <span>File: {uploaded.name}</span>
+                    <span>File: {scan_source_label or 'MRI_Scan.png'}</span>
                 </div>
                 """, unsafe_allow_html=True)
-        elif uploaded and not is_mri:
+        elif (uploaded or pil_img) and not is_mri:
             with st.container(border=True):
-                st.markdown("<div class='pro-card-title'>Uploaded Image (Rejected)</div>", unsafe_allow_html=True)
+                st.markdown("<div class='pro-card-title'>Scan (Rejected)</div>", unsafe_allow_html=True)
                 if pil_img:
                     st.image(pil_img, use_container_width=True)
-            st.error("Invalid Scan: The uploaded image is not recognized as a valid brain MRI. Please upload a clear brain MRI scan to proceed.")
-        elif not uploaded:
+            st.error("Invalid Scan: The image is not recognized as a valid brain MRI. Please provide a clear brain MRI scan to proceed.")
+        elif not uploaded and pil_img is None and vol_3d is None:
             st.markdown("""
             <div style="background-color:#161B22; border:1px solid #21262D; border-radius:12px;
                         padding:6rem 2rem; text-align:center; height:100%;">
                 <span style="font-size:3rem;">📂</span>
                 <h4 style="font-family:'Outfit',sans-serif; font-weight:600; color:#E6EDF3;
                            margin-top:1rem;">Diagnostics Queue Empty</h4>
-                <p style="color:#8B949E; font-size:0.88rem;">Upload a 2D brain MRI scan or a 3D NIfTI (.nii/.nii.gz) volume from the left panel to begin analysis.</p>
+                <p style="color:#8B949E; font-size:0.88rem;">Select a registered patient from the directory to automatically retrieve their prior AWS S3 scan, or upload a scan to begin analysis.</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -3688,7 +3809,7 @@ def render_dashboard_page():
                 "compactness": shape_data.get("compactness") if (has_tumor and 'shape_data' in locals() and shape_data) else None,
                 "solidity": shape_data.get("solidity") if (has_tumor and 'shape_data' in locals() and shape_data) else None,
                 "gradcam_focus": f"{vq}-{hq} Region" if ('vq' in locals() and 'hq' in locals()) else None,
-                "scan_filename": uploaded.name if ('uploaded' in locals() and uploaded) else "Scan_MRI"
+                "scan_filename": scan_source_label or (uploaded.name if uploaded else "Scan_MRI")
             }
             st.session_state["active_diagnostic_report"] = active_report
             st.session_state["last_diagnosis"] = predicted_class
@@ -3728,7 +3849,7 @@ def render_dashboard_page():
                         st.warning(f"⚠️ {pdf_gen_error}")
                     else:
                         st.info("Analysis required to generate report.")
-        elif not is_3d_nifti and not uploaded:
+        elif not is_3d_nifti and pil_img is None:
             with st.container(border=True):
                 st.markdown("<div style='color:#8B949E; font-size:0.85rem; text-align:center; padding:2rem 0;'>Awaiting scan input to run diagnosis...</div>", unsafe_allow_html=True)
 
