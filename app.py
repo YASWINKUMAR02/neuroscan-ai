@@ -650,6 +650,7 @@ div[data-testid="stFormSubmitButton"] > button:hover {
 """, unsafe_allow_html=True)
 
 # ── Constants & Dynamic Model Paths ───────────────────────────────────────────
+# Contributor: Sridharan (FS-Sridharan007) - Dynamic Relative Path Resolution & ReportLab PDF Integration
 BASE_DIR             = os.path.dirname(os.path.abspath(__file__))
 CLASSES              = ["glioma", "meningioma", "notumor", "pituitary"]
 MODEL_PATH           = os.path.join(BASE_DIR, "models", "best_efficientnet_b0.pth")
