@@ -1,5 +1,10 @@
 """
 volume_engine.py — 3D Volumetric NIfTI MRI Segmentation Engine for NeuroScan AI
+================================================================================
+Author / Lead Contributor: Sridharan (FS-Sridharan007)
+Module Scope: 3D BraTS Volumetric Segmentation, Physical Volume (cm³ & mm³),
+              Axial Slice Batching, Peak Lesion Extraction & Triplet Viewports.
+
 Processes structural 3D NIfTI brain MRI scans (.nii, .nii.gz), performs volume-wide
 slice-by-slice segmentation with U-Net (EfficientNet-B0), and computes physical voxel
 volume (cm³ & mm³), voxel counts, and slice coverage matching clinical benchmarks.
