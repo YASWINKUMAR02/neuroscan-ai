@@ -42,7 +42,6 @@ except ImportError:
 # ── Page Config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="NeuroScan AI — Brain Tumor MRI Analysis",
-    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -2011,12 +2010,35 @@ def render_login_page():
     }
 
     .block-container {
-        max-width: 440px !important;
-        padding-top: 3.5rem !important;
-        padding-bottom: 3.5rem !important;
+        max-width: 560px !important;
+        padding-top: 1.25rem !important;
+        padding-bottom: 1.25rem !important;
         padding-left: 1.25rem !important;
         padding-right: 1.25rem !important;
         margin: 0 auto !important;
+    }
+
+    /* Registration Two-Panel Styles */
+    .reg-panel-card {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 0.8rem;
+        height: 100%;
+    }
+    .reg-panel-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        color: #111827;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.5rem;
+        padding-bottom: 4px;
+        border-bottom: 1px solid #E2E8F0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
 
     /* Container Border Reset */
@@ -2030,41 +2052,48 @@ def render_login_page():
 
     /* Top ECG Waveform Line */
     .ecg-line-wrapper {
-        margin-bottom: 1.2rem;
+        margin-bottom: 0.3rem;
     }
 
     .login-heading-title {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 30px;
+        font-size: 22px;
         font-weight: 700;
         color: #111827 !important;
-        margin: 0 0 8px 0;
+        margin: 0 0 3px 0;
         line-height: 1.2;
         letter-spacing: -0.02em;
     }
 
     .login-heading-sub {
-        font-size: 14.5px;
+        font-size: 12.5px;
         color: #4B5563 !important;
-        margin: 0 0 1.5rem 0;
-        line-height: 1.55;
+        margin: 0 0 0.6rem 0;
+        line-height: 1.4;
         font-weight: 400;
     }
 
-    /* Input Field Labels: Monospace uppercase */
+    /* Input Field Labels: Monospace uppercase in Crisp Black */
     div[data-testid="stTextInput"] label,
-    div[data-testid="stTextInput"] label p {
-        color: #374151 !important;
+    div[data-testid="stTextInput"] label p,
+    div[data-testid="stNumberInput"] label,
+    div[data-testid="stNumberInput"] label p,
+    div[data-testid="stSelectbox"] label,
+    div[data-testid="stSelectbox"] label p {
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
         font-family: 'JetBrains Mono', monospace !important;
-        font-weight: 600 !important;
-        font-size: 11.5px !important;
-        letter-spacing: 0.1em !important;
+        font-weight: 700 !important;
+        font-size: 10.5px !important;
+        letter-spacing: 0.08em !important;
         text-transform: uppercase !important;
-        margin-bottom: 6px !important;
+        margin-bottom: 3px !important;
     }
 
-    /* Reset text input outer widget wrapper */
-    div[data-testid*="stTextInput"] {
+    /* Reset outer widget wrappers */
+    div[data-testid*="stTextInput"],
+    div[data-testid*="stNumberInput"],
+    div[data-testid*="stSelectbox"] {
         background: transparent !important;
         background-color: transparent !important;
         border: none !important;
@@ -2076,40 +2105,49 @@ def render_login_page():
     /* BaseWeb Input Container & Wrappers: Crisp White with Gray Border */
     div[data-testid*="stTextInput"] [data-baseweb="base-input"],
     div[data-testid*="stTextInput"] [data-baseweb="input"],
+    div[data-testid*="stNumberInput"] [data-baseweb="base-input"],
+    div[data-testid*="stNumberInput"] [data-baseweb="input"],
     div[data-baseweb="input"],
     div[data-baseweb="base-input"] {
         background: #FFFFFF !important;
         background-color: #FFFFFF !important;
         border: 1px solid #D1D5DB !important;
-        border-radius: 8px !important;
-        height: 46px !important;
-        min-height: 46px !important;
+        border-radius: 6px !important;
+        height: 38px !important;
+        min-height: 38px !important;
         padding: 0 !important;
         overflow: hidden !important;
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
         transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
     }
     div[data-testid*="stTextInput"] [data-baseweb="input"]:focus-within,
+    div[data-testid*="stNumberInput"] [data-baseweb="input"]:focus-within,
     div[data-baseweb="input"]:focus-within {
         border-color: #166534 !important;
-        box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.12) !important;
+        box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.12) !important;
     }
 
-    /* Text Input element inside BaseWeb */
+    /* Text & Number Input elements inside BaseWeb: Crisp Black Text & Visible Typing Caret */
     div[data-testid*="stTextInput"] input,
+    div[data-testid*="stNumberInput"] input,
     [data-testid="stTextInput"] input,
+    [data-testid="stNumberInput"] input,
     input[type="text"],
-    input[type="password"] {
+    input[type="password"],
+    input[type="number"],
+    input {
         background: #FFFFFF !important;
         background-color: #FFFFFF !important;
         color: #111827 !important;
         -webkit-text-fill-color: #111827 !important;
+        caret-color: #111827 !important;
         border: none !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
         font-family: 'Inter', sans-serif !important;
-        font-size: 14.5px !important;
-        height: 44px !important;
-        padding: 0 14px !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        height: 36px !important;
+        padding: 0 10px !important;
         box-shadow: none !important;
     }
     div[data-testid*="stTextInput"] input::placeholder,
@@ -2117,10 +2155,82 @@ def render_login_page():
         color: #9CA3AF !important;
         -webkit-text-fill-color: #9CA3AF !important;
     }
-    div[data-testid*="stTextInput"] input:focus {
+    div[data-testid*="stTextInput"] input:focus,
+    div[data-testid*="stNumberInput"] input:focus,
+    input:focus {
         outline: none !important;
         border: none !important;
         box-shadow: none !important;
+        caret-color: #111827 !important;
+    }
+
+    /* Number Input Stepper Buttons */
+    div[data-testid*="stNumberInput"] button {
+        background: #F3F4F6 !important;
+        background-color: #F3F4F6 !important;
+        border: none !important;
+        color: #111827 !important;
+        height: 22px !important;
+        min-height: 22px !important;
+        width: 32px !important;
+    }
+    div[data-testid*="stNumberInput"] button svg {
+        fill: #111827 !important;
+        color: #111827 !important;
+        stroke: #111827 !important;
+        width: 14px !important;
+        height: 14px !important;
+    }
+
+    /* Selectbox (Gender) Styling: Crisp White Container + Black Text */
+    div[data-testid*="stSelectbox"] [data-baseweb="select"] > div {
+        background: #FFFFFF !important;
+        background-color: #FFFFFF !important;
+        border: 1px solid #D1D5DB !important;
+        border-radius: 6px !important;
+        min-height: 38px !important;
+        height: 38px !important;
+        color: #111827 !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+    }
+    div[data-testid*="stSelectbox"] [data-baseweb="select"] [data-testid="stMarkdownContainer"] p,
+    div[data-testid*="stSelectbox"] [data-baseweb="select"] div,
+    div[data-testid*="stSelectbox"] [data-baseweb="select"] span {
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+    }
+    div[data-testid*="stSelectbox"] svg {
+        fill: #111827 !important;
+        color: #111827 !important;
+        stroke: #111827 !important;
+    }
+
+    /* Selectbox Dropdown Menu Popover Options */
+    div[data-baseweb="popover"],
+    div[data-baseweb="menu"],
+    ul[role="listbox"] {
+        background-color: #FFFFFF !important;
+        background: #FFFFFF !important;
+        border: 1px solid #E5E7EB !important;
+        border-radius: 6px !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+    }
+    li[role="option"],
+    li[role="option"] * {
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+        background-color: #FFFFFF !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 13.5px !important;
+    }
+    li[role="option"]:hover,
+    li[role="option"][aria-selected="true"] {
+        background-color: #F3F4F6 !important;
+        background: #F3F4F6 !important;
+        color: #111827 !important;
     }
 
     /* Password Eye Visibility Toggle Button */
@@ -2131,9 +2241,9 @@ def render_login_page():
         background-color: #FFFFFF !important;
         border: none !important;
         box-shadow: none !important;
-        height: 44px !important;
-        min-height: 44px !important;
-        width: 44px !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        width: 36px !important;
         padding: 0 !important;
         margin: 0 !important;
         cursor: pointer !important;
@@ -2147,16 +2257,8 @@ def render_login_page():
         fill: #6B7280 !important;
         color: #6B7280 !important;
         stroke: #6B7280 !important;
-        width: 18px !important;
-        height: 18px !important;
-        transition: fill 0.15s ease, color 0.15s ease !important;
-    }
-    div[data-testid*="stTextInput"] button:hover svg,
-    div[data-testid*="stTextInput"] [data-baseweb="input"] button:hover svg,
-    div[data-baseweb="input"] button:hover svg {
-        fill: #111827 !important;
-        color: #111827 !important;
-        stroke: #111827 !important;
+        width: 16px !important;
+        height: 16px !important;
     }
 
     /* Utility Row (Stay signed in / Forgot password) */
@@ -2164,23 +2266,13 @@ def render_login_page():
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin: 10px 0 14px 0;
-        font-size: 12.5px;
-    }
-    .stay-signed-text {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 11px;
-        color: #374151;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        display: flex;
-        align-items: center;
-        gap: 6px;
+        margin: 4px 0 6px 0;
+        font-size: 11.5px;
     }
     .forgot-pwd-link {
         color: #0F766E;
         text-decoration: none;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 500;
     }
 
@@ -2188,58 +2280,58 @@ def render_login_page():
     .pwd-policy-container {
         background: #F8FAFC;
         border: 1px solid #E2E8F0;
-        border-radius: 8px;
-        padding: 10px 14px;
-        margin: 6px 0 14px 0;
+        border-radius: 6px;
+        padding: 6px 10px;
+        margin: 4px 0 6px 0;
         font-family: 'Inter', sans-serif;
     }
     .pwd-policy-header {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 10.5px;
+        font-size: 10px;
         font-weight: 600;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.06em;
         color: #166534;
         text-transform: uppercase;
-        margin-bottom: 6px;
+        margin-bottom: 3px;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
     }
     .pwd-policy-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 4px 10px;
-        font-size: 12px;
+        gap: 2px 8px;
+        font-size: 10.5px;
         color: #4B5563;
     }
     .pwd-policy-item {
         display: flex;
         align-items: center;
-        gap: 6px;
-        line-height: 1.4;
-        font-size: 11.5px;
+        gap: 4px;
+        line-height: 1.3;
+        font-size: 10.5px;
     }
     .pwd-policy-bullet {
         color: #166534;
-        font-size: 12px;
+        font-size: 10.5px;
         font-weight: bold;
     }
 
     /* Primary Submit Button: Solid Deep Black */
     div[data-testid="stFormSubmitButton"] button {
-        height: 46px !important;
-        min-height: 46px !important;
+        height: 38px !important;
+        min-height: 38px !important;
         font-family: 'Inter', sans-serif !important;
-        font-size: 15px !important;
+        font-size: 14px !important;
         font-weight: 600 !important;
         letter-spacing: 0.01em !important;
-        margin-top: 6px !important;
+        margin-top: 4px !important;
         background: #111827 !important;
         background-color: #111827 !important;
         color: #FFFFFF !important;
         border: 1px solid #111827 !important;
-        border-radius: 8px !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12) !important;
+        border-radius: 6px !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
         transition: all 0.15s ease !important;
     }
     div[data-testid="stFormSubmitButton"] button:hover {
@@ -2247,7 +2339,7 @@ def render_login_page():
         background-color: #1F2937 !important;
         border-color: #1F2937 !important;
         color: #FFFFFF !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.16) !important;
         transform: translateY(-1px) !important;
     }
 
@@ -2262,11 +2354,11 @@ def render_login_page():
         border: 1px solid #E5E7EB !important;
         border-radius: 6px !important;
         font-family: 'Inter', sans-serif !important;
-        font-size: 12px !important;
+        font-size: 11.5px !important;
         font-weight: 500 !important;
-        height: 32px !important;
-        min-height: 32px !important;
-        padding: 0 8px !important;
+        height: 28px !important;
+        min-height: 28px !important;
+        padding: 0 6px !important;
         white-space: nowrap !important;
         transition: all 0.15s ease !important;
         cursor: pointer !important;
@@ -2277,11 +2369,68 @@ def render_login_page():
         border-color: #D1D5DB !important;
     }
 
+    /* Checkbox styling */
+    div[data-testid="stCheckbox"] {
+        margin: 2px 0 4px 0 !important;
+    }
+    div[data-testid="stCheckbox"] label {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 10px !important;
+        color: #374151 !important;
+        letter-spacing: 0.06em !important;
+        text-transform: uppercase !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+    }
+    div[data-testid="stCheckbox"] label p {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 10px !important;
+        color: #374151 !important;
+        letter-spacing: 0.06em !important;
+        text-transform: uppercase !important;
+        font-weight: 600 !important;
+    }
+    div[data-testid="stCheckbox"] input[type="checkbox"] {
+        accent-color: #111827 !important;
+        cursor: pointer !important;
+        width: 13px !important;
+        height: 13px !important;
+    }
+
+    /* Tab Styling for Login / Register */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+        background-color: #F3F4F6 !important;
+        padding: 3px !important;
+        border-radius: 6px !important;
+        border: 1px solid #E5E7EB !important;
+        margin-bottom: 0.75rem !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 4px !important;
+        padding: 5px 10px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        color: #4B5563 !important;
+        background: transparent !important;
+        border: none !important;
+        flex: 1 !important;
+        text-align: center !important;
+        justify-content: center !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #FFFFFF !important;
+        color: #111827 !important;
+        font-weight: 600 !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
+    }
+
     /* Footnotes */
     .login-footer-contact {
         text-align: center;
-        margin-top: 1.8rem;
-        font-size: 13.5px;
+        margin-top: 0.75rem;
+        font-size: 12px;
         color: #374151;
     }
     .login-footer-contact strong {
@@ -2291,156 +2440,242 @@ def render_login_page():
 
     .login-footer-compliance {
         text-align: center;
-        margin-top: 1.5rem;
+        margin-top: 0.35rem;
         font-family: 'JetBrains Mono', monospace;
-        font-size: 11px;
+        font-size: 10px;
         color: #9CA3AF;
         letter-spacing: 0.04em;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # 1. ECG Pulse Line Graphic
-    st.markdown("""
-    <div class="ecg-line-wrapper">
-      <svg width="220" height="28" viewBox="0 0 220 28" fill="none" stroke="#166534" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M0 14h60l8-10 10 22 10-18 8 11 10-5h114"/>
-      </svg>
-    </div>
-    <h1 class="login-heading-title">Sign in</h1>
-    <p class="login-heading-sub">Enter your clinical ID to access patient imaging and reports.</p>
-    """, unsafe_allow_html=True)
-
-    # 2. Quick Demo Role Selector Pills (Clean Light Theme)
-    r_col1, r_col2, r_col3, r_back = st.columns([1, 1, 1.2, 1])
-    with r_col1:
-        if st.button("Clinician", key="af_doc", use_container_width=True):
-            st.session_state["login_user_input"] = "doctor"
-            st.session_state["login_pass_input"] = "brain123"
-            st.rerun()
-    with r_col2:
-        if st.button("Patient", key="af_pat", use_container_width=True):
-            st.session_state["login_user_input"] = "patient"
-            st.session_state["login_pass_input"] = "patient123"
-            st.rerun()
-    with r_col3:
-        if st.button("Admin", key="af_adm", use_container_width=True):
-            st.session_state["login_user_input"] = "admin"
-            st.session_state["login_pass_input"] = "neuro2025"
-            st.rerun()
-    with r_back:
-        if st.button("Home", key="login_back_home_btn", use_container_width=True):
+    # 1. Top Header with ECG Waveform and Top-Right Home Button
+    c_hdr_left, c_hdr_right = st.columns([3.3, 0.9])
+    with c_hdr_left:
+        st.markdown("""
+        <div class="ecg-line-wrapper">
+          <svg width="180" height="20" viewBox="0 0 220 28" fill="none" stroke="#166534" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M0 14h60l8-10 10 22 10-18 8 11 10-5h114"/>
+          </svg>
+        </div>
+        <h1 class="login-heading-title">NeuroScan AI</h1>
+        <p class="login-heading-sub">Secure clinical workstation and patient imaging portal.</p>
+        """, unsafe_allow_html=True)
+    with c_hdr_right:
+        st.markdown("<div style='margin-top: 0.2rem;'></div>", unsafe_allow_html=True)
+        if st.button("Home", key="login_back_home_top_btn", use_container_width=True):
             st.session_state.page = "landing"
             st.rerun()
 
-    st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
+    # 2. Tabs: Sign In vs Create Patient Account (No emojis)
+    tab_signin, tab_signup = st.tabs(["Sign In", "Create Patient Account"])
 
-    # 3. Clean Medical Form
-    with st.form("exact_login_form", clear_on_submit=False):
-        login_user = st.text_input(
-            "CLINICAL ID",
-            value=st.session_state.get("login_user_input", ""),
-            placeholder="j.martinez",
-            key="input_username"
-        )
-
-        login_pass = st.text_input(
-            "PASSWORD",
-            value=st.session_state.get("login_pass_input", ""),
-            placeholder="••••••••••••",
-            type="password",
-            key="input_password"
-        )
-
+    with tab_signin:
+        # Demo Accounts Selector
         st.markdown("""
-        <div class="login-utility-row">
-          <span class="stay-signed-text">
-            <input type="checkbox" checked style="accent-color:#111827; cursor:pointer; width:13px; height:13px; margin:0;"/>
-            STAY SIGNED IN
-          </span>
-          <a href="#" class="forgot-pwd-link">Forgot password?</a>
-        </div>
-
-        <div class="pwd-policy-container">
-          <div class="pwd-policy-header">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-            Password Security Requirements
-          </div>
-          <div class="pwd-policy-grid">
-            <div class="pwd-policy-item"><span class="pwd-policy-bullet">•</span> Min 8 characters</div>
-            <div class="pwd-policy-item"><span class="pwd-policy-bullet">•</span> 1+ Uppercase (A-Z)</div>
-            <div class="pwd-policy-item"><span class="pwd-policy-bullet">•</span> 1+ Lowercase (a-z)</div>
-            <div class="pwd-policy-item"><span class="pwd-policy-bullet">•</span> 1+ Number (0-9)</div>
-            <div class="pwd-policy-item" style="grid-column: span 2;"><span class="pwd-policy-bullet">•</span> 1+ Special character (!@#$%^&*)</div>
-          </div>
+        <div style="font-size:10px; font-family:'JetBrains Mono', monospace; color:#6B7280; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; margin-bottom:4px;">
+            Demo Accounts:
         </div>
         """, unsafe_allow_html=True)
 
-        submit_btn = st.form_submit_button("Sign in", use_container_width=True)
+        r_col1, r_col2, r_col3 = st.columns(3)
+        with r_col1:
+            if st.button("Clinician", key="af_doc", use_container_width=True):
+                st.session_state["login_user_input"] = "doctor"
+                st.session_state["login_pass_input"] = "brain123"
+                st.rerun()
+        with r_col2:
+            if st.button("Patient", key="af_pat", use_container_width=True):
+                st.session_state["login_user_input"] = "patient"
+                st.session_state["login_pass_input"] = "patient123"
+                st.rerun()
+        with r_col3:
+            if st.button("Admin", key="af_adm", use_container_width=True):
+                st.session_state["login_user_input"] = "admin"
+                st.session_state["login_pass_input"] = "neuro2025"
+                st.rerun()
 
-    # 4. Form Validation & Authentication Processing
-    if submit_btn:
-        clean_user = login_user.strip() if login_user else ""
-        clean_pass = login_pass.strip() if login_pass else ""
+        st.markdown("<div style='margin-top:0.3rem;'></div>", unsafe_allow_html=True)
 
-        if not clean_user and not clean_pass:
-            st.error("Please enter both clinical ID and password.")
-        elif not clean_user:
-            st.error("Clinical ID is required.")
-        elif not clean_pass:
-            st.error("Password is required.")
-        elif len(clean_user) < 2:
-            st.error("Clinical ID must be at least 2 characters.")
-        else:
-            try:
-                user_record = db.authenticate_user(clean_user, login_pass)
+        with st.form("exact_login_form", clear_on_submit=False):
+            login_user = st.text_input(
+                "CLINICAL ID / USERNAME",
+                value=st.session_state.get("login_user_input", ""),
+                placeholder="j.martinez",
+                key="input_username"
+            )
 
-                if user_record:
-                    st.session_state.logged_in = True
-                    st.session_state.username = user_record["username"]
-                    st.session_state.role = user_record["role"]
-                    st.session_state.page = "dashboard"
+            login_pass = st.text_input(
+                "PASSWORD",
+                value=st.session_state.get("login_pass_input", ""),
+                placeholder="••••••••••••",
+                type="password",
+                key="input_password"
+            )
 
-                    db.log_activity(
-                        username=user_record["username"],
-                        action="USER_LOGIN",
-                        role=user_record["role"],
-                        details=f"User signed into {user_record['role'].title()} portal",
-                        status="SUCCESS"
-                    )
-                    st.rerun()
-                else:
+            c_chk, c_forgot = st.columns([1.4, 1])
+            with c_chk:
+                stay_signed_in = st.checkbox("STAY SIGNED IN", value=True, key="cb_stay_signed_in")
+            with c_forgot:
+                st.markdown("<div style='text-align:right; padding-top:4px;'><a href='#' class='forgot-pwd-link'>Forgot password?</a></div>", unsafe_allow_html=True)
+
+            st.markdown("""
+            <div style="font-size:10.5px; color:#6B7280; margin:3px 0 6px 0;">
+                Min 8 characters with uppercase, lowercase, number &amp; symbol.
+            </div>
+            """, unsafe_allow_html=True)
+
+            submit_btn = st.form_submit_button("Sign in", use_container_width=True)
+
+        if submit_btn:
+            clean_user = login_user.strip() if login_user else ""
+            clean_pass = login_pass.strip() if login_pass else ""
+
+            if not clean_user and not clean_pass:
+                st.error("Please enter both username/clinical ID and password.")
+            elif not clean_user:
+                st.error("Clinical ID is required.")
+            elif not clean_pass:
+                st.error("Password is required.")
+            elif len(clean_user) < 2:
+                st.error("Clinical ID must be at least 2 characters.")
+            else:
+                try:
+                    user_record = db.authenticate_user(clean_user, login_pass)
+
+                    if user_record:
+                        st.session_state.logged_in = True
+                        st.session_state.username = user_record["username"]
+                        st.session_state.role = user_record["role"]
+                        st.session_state.page = "dashboard"
+
+                        # Load patient profile if role is patient
+                        if user_record["role"] == "patient":
+                            pat_profile = db.get_patient_by_user_id(user_record.get("id"))
+                            if pat_profile:
+                                st.session_state.patient_name = pat_profile.get("full_name", user_record.get("full_name", ""))
+                                st.session_state.patient_age = pat_profile.get("age", 25)
+                                st.session_state.patient_gender = pat_profile.get("gender", "Not specified")
+                            else:
+                                st.session_state.patient_name = user_record.get("full_name", clean_user.title())
+
+                        db.log_activity(
+                            username=user_record["username"],
+                            action="USER_LOGIN",
+                            role=user_record["role"],
+                            details=f"User signed into {user_record['role'].title()} portal",
+                            status="SUCCESS"
+                        )
+                        st.rerun()
+                    else:
+                        db.log_error(
+                            error_type="AUTH_FAILED",
+                            severity="WARNING",
+                            message=f"Failed login attempt for username: '{clean_user}'",
+                            component="auth",
+                            username=clean_user
+                        )
+                        db.log_activity(
+                            username=clean_user,
+                            action="USER_LOGIN",
+                            role="unknown",
+                            details=f"Failed password attempt for '{clean_user}'",
+                            status="FAILED"
+                        )
+                        st.error("Invalid credentials. Please verify your username and password.")
+                except Exception as exc:
                     db.log_error(
-                        error_type="AUTH_FAILED",
-                        severity="WARNING",
-                        message=f"Failed login attempt for username: '{clean_user}'",
-                        component="auth",
+                        error_type="DATABASE_ERROR",
+                        severity="CRITICAL",
+                        message=str(exc),
+                        component="database",
                         username=clean_user
                     )
-                    db.log_activity(
-                        username=clean_user,
-                        action="USER_LOGIN",
-                        role="unknown",
-                        details=f"Failed password attempt for '{clean_user}'",
-                        status="FAILED"
-                    )
-                    st.error("Invalid credentials. Please verify your clinical ID and password.")
-            except Exception as exc:
-                db.log_error(
-                    error_type="DATABASE_ERROR",
-                    severity="CRITICAL",
-                    message=str(exc),
-                    component="database",
-                    username=clean_user
-                )
-                st.error("Database connection unavailable. Please contact system administrator.")
+                    st.error("Database connection unavailable. Please contact system administrator.")
 
-    # 5. Footnotes matching reference image
+    with tab_signup:
+        st.markdown("<p style='font-size:12.5px; color:#4B5563; margin-bottom:0.6rem;'>Create a personal patient account to securely view your brain MRI scans and AI diagnostic summaries.</p>", unsafe_allow_html=True)
+        
+        with st.form("patient_registration_form", clear_on_submit=False):
+            p_left, p_right = st.columns(2, gap="medium")
+
+            with p_left:
+                st.markdown("""
+                <div class="reg-panel-title">
+                  Personal Details
+                </div>
+                """, unsafe_allow_html=True)
+
+                reg_full_name = st.text_input("FULL LEGAL NAME", placeholder="e.g. Sarah Connor", key="reg_pat_fullname")
+                reg_age = st.text_input("AGE", value="30", placeholder="e.g. 30", key="reg_pat_age")
+                reg_gender = st.selectbox("GENDER", ["Female", "Male", "Other", "Prefer not to say"], key="reg_pat_gender")
+
+            with p_right:
+                st.markdown("""
+                <div class="reg-panel-title">
+                  Account Credentials
+                </div>
+                """, unsafe_allow_html=True)
+
+                reg_username = st.text_input("DESIRED USERNAME", placeholder="e.g. sarah_c", key="reg_pat_username")
+                reg_password = st.text_input("PASSWORD", placeholder="Min 8 chars, Aa1!", type="password", key="reg_pat_pwd")
+                reg_password_confirm = st.text_input("CONFIRM PASSWORD", placeholder="Re-enter password", type="password", key="reg_pat_pwd_confirm")
+
+                st.markdown("""
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 8px; margin-top:6px;">
+                  <div style="font-family:'JetBrains Mono', monospace; font-size:10px; font-weight:700; color:#166534; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:5px; display:flex; align-items:center; gap:4px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    Password Requirements
+                  </div>
+                  <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                    <span style="background:#FFFFFF; border:1px solid #E2E8F0; color:#374151; font-size:10.5px; padding:2px 6px; border-radius:4px; font-weight:500; white-space:nowrap;">8+ Chars</span>
+                    <span style="background:#FFFFFF; border:1px solid #E2E8F0; color:#374151; font-size:10.5px; padding:2px 6px; border-radius:4px; font-weight:500; white-space:nowrap;">A-Z</span>
+                    <span style="background:#FFFFFF; border:1px solid #E2E8F0; color:#374151; font-size:10.5px; padding:2px 6px; border-radius:4px; font-weight:500; white-space:nowrap;">a-z</span>
+                    <span style="background:#FFFFFF; border:1px solid #E2E8F0; color:#374151; font-size:10.5px; padding:2px 6px; border-radius:4px; font-weight:500; white-space:nowrap;">0-9</span>
+                    <span style="background:#FFFFFF; border:1px solid #E2E8F0; color:#374151; font-size:10.5px; padding:2px 6px; border-radius:4px; font-weight:500; white-space:nowrap;">Symbol (!@#$)</span>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("<div style='margin-top:0.8rem;'></div>", unsafe_allow_html=True)
+            reg_submit = st.form_submit_button("Create Patient Account", use_container_width=True)
+
+        if reg_submit:
+            clean_fn = reg_full_name.strip() if reg_full_name else ""
+            clean_u = reg_username.strip().lower() if reg_username else ""
+            clean_p = reg_password.strip() if reg_password else ""
+            clean_pc = reg_password_confirm.strip() if reg_password_confirm else ""
+            clean_age_str = reg_age.strip() if reg_age else ""
+
+            if not clean_fn or not clean_u or not clean_p or not clean_age_str:
+                st.error("Please fill in all required fields (Full Name, Age, Username, and Password).")
+            elif not clean_age_str.isdigit() or not (1 <= int(clean_age_str) <= 120):
+                st.error("Please enter a valid age between 1 and 120.")
+            elif clean_p != clean_pc:
+                st.error("Passwords do not match. Please re-enter your password.")
+            elif len(clean_u) < 3:
+                st.error("Username must be at least 3 characters long.")
+            else:
+                pat_id, reg_err = db.create_patient_account(
+                    username=clean_u,
+                    password=clean_p,
+                    full_name=clean_fn,
+                    age=int(clean_age_str),
+                    gender=reg_gender
+                )
+                if reg_err:
+                    st.error(f"Account Creation Failed: {reg_err}")
+                else:
+                    st.session_state.page = "landing"
+                    st.toast(f"Account created successfully for {clean_fn}! You can now sign in.")
+                    st.rerun()
+
+    # 3. Footnotes matching reference image
     st.markdown("""
     <div class="login-footer-contact">
-      Need access? <strong>Contact your administrator</strong>
+      Need clinician or admin access? <strong>Contact your hospital administrator</strong>
     </div>
     <div class="login-footer-compliance">
       Encrypted connection • HIPAA compliant
@@ -2469,7 +2704,7 @@ def render_dashboard_page():
     st.markdown(f"""
     <div class="top-bar">
         <div class="logo-container">
-            🧠&nbsp; NeuroScan AI <span style="color:#8B949E; font-size:0.85rem; font-weight:400; margin-left:8px;">| Clinical Workstation</span>
+            <span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:#00D4FF; margin-right:8px; box-shadow:0 0 8px rgba(0,212,255,0.8);"></span>NeuroScan AI <span style="color:#8B949E; font-size:0.85rem; font-weight:400; margin-left:8px;">| Clinical Workstation</span>
         </div>
         <div class="top-bar-right">
             <span><span class="status-dot"></span>Models Online</span>
@@ -3521,7 +3756,7 @@ def render_patient_dashboard():
     st.markdown(f"""
     <div class="top-bar">
         <div class="logo-container">
-            🧠&nbsp; NeuroScan AI <span style="color:#8B949E; font-size:0.85rem; font-weight:400; margin-left:8px;">| Patient Portal</span>
+            <span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:#3FB950; margin-right:8px; box-shadow:0 0 8px rgba(63,185,80,0.8);"></span>NeuroScan AI <span style="color:#8B949E; font-size:0.85rem; font-weight:400; margin-left:8px;">| Patient Portal</span>
         </div>
         <div class="top-bar-right">
             <span class="patient-chip" style="color:#3FB950; border-color:rgba(63,185,80,0.3);">👤 Patient: @{username_display}</span>
@@ -3769,7 +4004,13 @@ def render_patient_dashboard():
             st.markdown("""
             <div style="background-color:#161B22; border:1px solid #21262D; border-radius:12px;
                         padding:5rem 2rem; text-align:center;">
-                <span style="font-size:3rem;">🧠</span>
+                <div style="width:48px; height:48px; border-radius:10px; background:rgba(0,212,255,0.1); border:1px solid rgba(0,212,255,0.25); display:inline-flex; align-items:center; justify-content:center; margin-bottom:0.8rem;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00D4FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                </div>
                 <h4 style="color:#E6EDF3; margin-top:0.8rem;">Ready for Scan Upload</h4>
                 <p style="color:#8B949E; font-size:0.85rem;">Upload your brain MRI on the left to receive your AI health insights.</p>
             </div>
@@ -3855,7 +4096,7 @@ def render_patient_dashboard():
         chat_box = st.container(height=320, border=False)
         with chat_box:
             for msg in st.session_state.patient_chat_history:
-                with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "🧠"):
+                with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "assistant"):
                     st.markdown(msg["content"])
                     if msg.get("sources"):
                         st.caption(f"📚 Sources: {', '.join(msg['sources'])}")

@@ -18,13 +18,18 @@ import traceback
 import re
 import bcrypt
 import sqlite3
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
-# MySQL Configuration
-MYSQL_HOST = "localhost"
-MYSQL_USER = "root"
-MYSQL_PASSWORD = "root"
-MYSQL_PORT = 3306
-MYSQL_DB = "neuroscan_db"
+# MySQL / AWS RDS Configuration (dynamically loaded from .env)
+MYSQL_HOST = os.getenv("DB_HOST", "localhost")
+MYSQL_USER = os.getenv("DB_USER", "root")
+MYSQL_PASSWORD = os.getenv("DB_PASSWORD", "root")
+MYSQL_PORT = int(os.getenv("DB_PORT", 3306))
+MYSQL_DB = os.getenv("DB_NAME", "neuroscan_db")
 
 # SQLite Fallback Path
 SQLITE_DB_PATH = r"C:\TumorOI\neuroscan.db"
@@ -713,8 +718,29 @@ def get_all_patients():
         return [dict(r) for r in rows]
 
 
+def get_patient_by_user_id(user_id: int):
+    """Retrieve patient record associated with a specific user_id."""
+    if not user_id:
+        return None
+    conn, engine = get_db_connection()
+    sql = "SELECT id, full_name, age, gender, mrn, created_at FROM patients WHERE user_id = %s" if engine == "mysql" else \
+          "SELECT id, full_name, age, gender, mrn, created_at FROM patients WHERE user_id = ?"
+    if engine == "mysql":
+        with conn.cursor() as cur:
+            cur.execute(sql, (user_id,))
+            row = cur.fetchone()
+        conn.close()
+        return row
+    else:
+        cur = conn.cursor()
+        cur.execute(sql, (user_id,))
+        row = cur.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
 def create_patient_account(username: str, password: str, full_name: str, age: int, gender: str, doctor_username: str = ""):
-    """Doctor provisions a new Patient account and demographic profile with password policy validation."""
+    """Create a new Patient account and demographic profile with password policy validation."""
     clean_u = username.strip() if username else ""
     if not clean_u or not password or not full_name or not full_name.strip():
         return None, "All fields (Username, Password, Full Name, Age, Gender) are required."
@@ -731,11 +757,17 @@ def create_patient_account(username: str, password: str, full_name: str, age: in
     patient_id = create_or_get_patient(full_name.strip(), age, gender, user_id=user_id)
     
     # Log audit event
+    action_type = "PATIENT_ONBOARDED" if doctor_username else "PATIENT_REGISTERED"
+    actor_role = "doctor" if doctor_username else "patient"
+    actor_user = doctor_username if doctor_username else clean_u
+    log_detail = f"Doctor onboarded patient '{full_name.strip()}' (Username: @{clean_u})" if doctor_username else \
+                 f"Patient self-registered account '{full_name.strip()}' (@{clean_u}, Age: {age}, Gender: {gender})"
+
     log_activity(
-        username=doctor_username or "doctor",
-        action="PATIENT_ONBOARDED",
-        role="doctor",
-        details=f"Doctor onboarded patient '{full_name.strip()}' (Portal Username: @{clean_u}, Age: {age}, Gender: {gender})",
+        username=actor_user,
+        action=action_type,
+        role=actor_role,
+        details=log_detail,
         status="SUCCESS"
     )
     return patient_id, None

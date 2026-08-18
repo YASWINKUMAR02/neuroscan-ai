@@ -439,7 +439,7 @@ def _synthesize_local_rag_answer(
                 area_line = f"• **Tumor Size / Area**: The segmented region measures approximately **{area_cm:.2f} cm²**.\n" if area_cm else ""
                 shape_line = f"• **Shape Analysis**: The tumor contour is categorized as **{shape_lbl}**.\n\n" if shape_lbl else "\n"
                 return (
-                    f"### 🧠 Summary of Your MRI Scan Results\n\n"
+                    f"### Summary of Your MRI Scan Results\n\n"
                     f"Hello **{p_name}**, here is an easy-to-understand explanation of your recent scan analysis:\n\n"
                     f"• **AI Finding**: The scan showed patterns of **{diag_val.title()}** with **{conf_pct:.1f}% AI confidence**.\n"
                     f"{area_line}"
@@ -559,7 +559,7 @@ def _synthesize_local_rag_answer(
             area_str = f"localized tumor area of **{tumor_area_cm2:.2f} cm²**" if tumor_area_cm2 else "brain tissue change"
             return (
                 f"{report_summary_header}"
-                f"### 🧠 Understanding Gliomas & Daily Care\n\n"
+                f"### Understanding Gliomas & Daily Care\n\n"
                 f"A **glioma** is a growth that develops from glial cells (supportive cells in the brain). "
                 f"Our AI system analyzed your scan and detected a {area_str}.\n\n"
                 f"**Key Care & Next Steps**:\n"
@@ -571,7 +571,7 @@ def _synthesize_local_rag_answer(
         elif any(w in combined for w in ["meningioma", "benign"]):
             return (
                 f"{report_summary_header}"
-                f"### 🧠 Understanding Meningiomas & Watchful Observation\n\n"
+                f"### Understanding Meningiomas & Watchful Observation\n\n"
                 f"A **meningioma** is a growth on the outer membranes (the meninges) that surround the brain and spinal cord.\n\n"
                 f"**Important Health Facts & Maintenance**:\n"
                 f"• **Over 80% are completely benign (non-cancerous)** and develop very slowly over many years.\n"
@@ -582,7 +582,7 @@ def _synthesize_local_rag_answer(
         elif any(w in combined for w in ["pituitary", "hormone"]):
             return (
                 f"{report_summary_header}"
-                f"### 🧠 Understanding Pituitary Growths & Hormonal Wellness\n\n"
+                f"### Understanding Pituitary Growths & Hormonal Wellness\n\n"
                 f"The **pituitary gland** is located at the base of the brain and regulates your body's vital hormone systems.\n\n"
                 f"**Key Maintenance Points**:\n"
                 f"• Almost all pituitary growths are **benign (non-cancerous)**.\n"
@@ -593,7 +593,7 @@ def _synthesize_local_rag_answer(
         else:
             return (
                 f"{report_summary_header}"
-                f"### 🧠 NeuroScan Patient Health Guidance\n\n"
+                f"### NeuroScan Patient Health Guidance\n\n"
                 f"Thank you for your question. Here is verified medical guidance to support your brain wellness:\n\n"
                 f"{ref_block}\n\n"
                 f"💡 **Tip**: Share your MRI report and these questions with your neurologist or neurosurgeon for personalized medical recommendations."
