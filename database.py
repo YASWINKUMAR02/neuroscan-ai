@@ -1,5 +1,10 @@
 """
 database.py — Database Layer for NeuroScan AI (MySQL with SQLite Fallback)
+=========================================================================
+Author / Contributor: Sridharan (FS-Sridharan007)
+Module Scope: Dual MySQL/SQLite Failover Architecture, Dynamic Path Resolution,
+              Patient Records Schema & Audit Logging.
+
 Connected to local MySQL Server (root/root @ localhost:3306 -> neuroscan_db)
 
 Provides persistence for:
