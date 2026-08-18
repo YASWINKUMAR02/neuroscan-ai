@@ -3674,6 +3674,45 @@ def render_dashboard_page():
                 </div>
                 """, unsafe_allow_html=True)
 
+                # Per-Lesion Detection Breakdown (Lesion-Level Confidence & Location Analysis)
+                lesion_list = seg_3d_res.get("lesions", [])
+                lesion_cnt = len(lesion_list)
+                
+                if lesion_cnt > 0:
+                    st.markdown(f"""
+                    <div style="margin-top:0.9rem; padding:0.75rem; background:#0D1117; border:1px solid #30363D; border-radius:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                            <span style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em; font-weight:700; color:#00D4FF;">
+                                📍 Lesion Breakdown ({lesion_cnt} Lesion{"s" if lesion_cnt > 1 else ""} Detected)
+                            </span>
+                            <span style="font-size:0.72rem; padding:0.15rem 0.45rem; background:rgba(0,212,255,0.12); border:1px solid rgba(0,212,255,0.3); border-radius:12px; color:#00D4FF;">
+                                Multi-Focal Analysis
+                            </span>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                    # Display top 5 lesions
+                    for l_idx, les in enumerate(lesion_list[:5]):
+                        cat_color = "#FF9500" if "Small" in les["category"] else "#FF3B30"
+                        st.markdown(f"""
+                        <div style="background:#161B22; border-left:3px solid {cat_color}; padding:0.55rem 0.75rem; border-radius:4px; margin-bottom:0.4rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-size:0.8rem; font-weight:700; color:#E6EDF3;">
+                                    Lesion #{les['lesion_id']}: {les['category']}
+                                </span>
+                                <span style="font-family:'JetBrains Mono',monospace; font-size:0.78rem; font-weight:700; color:{cat_color};">
+                                    {les['confidence_pct']}% Conf.
+                                </span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:0.73rem; color:#8B949E; margin-top:0.25rem;">
+                                <span>📏 Volume: <b>{les['volume_cm3']} cm³</b> ({les['volume_mm3']} mm³)</span>
+                                <span>📍 Location: <b>Slice Z={les['slice_z']}</b> | Centroid ({les['centroid'][0]}, {les['centroid'][1]})</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    st.markdown("</div>", unsafe_allow_html=True)
+
                 st.markdown(f"""
                 <div style="font-size:0.75rem; color:#8B949E; margin-top:0.75rem; padding:0.5rem; background:#0D1117; border-radius:6px; line-height:1.6;">
                     🎯 <b>Peak Lesion Slice</b>: Axial Slice <b>Z = {seg_3d_res['peak_slice_idx']}</b> ({seg_3d_res['peak_slice_voxel_count']:,} active pixels)<br/>
