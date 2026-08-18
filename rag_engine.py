@@ -604,4 +604,4 @@ def _synthesize_local_rag_answer(
 
 # Auto-initialize on module load
 init_rag_engine()
-
+# NeuroScan AI RAG Engine Pipeline Initialized
