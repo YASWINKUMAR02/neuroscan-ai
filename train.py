@@ -28,10 +28,11 @@ class TransformedSubset(torch.utils.data.Dataset):
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Configuration ────────────────────────────────────────────────────────────
-DATA_DIR = r"C:\TumorOI\dataset\preprocessed"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "dataset", "preprocessed")
 TRAIN_DIR = os.path.join(DATA_DIR, "Training")
 TEST_DIR = os.path.join(DATA_DIR, "Testing")
-MODELS_DIR = r"C:\TumorOI\models"
+MODELS_DIR = os.path.join(BASE_DIR, "models")
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 # Hyperparameters

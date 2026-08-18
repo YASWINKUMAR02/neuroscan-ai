@@ -70,9 +70,10 @@ class TransformedSubset(Dataset):
         return len(self.subset)
 
 # ── Configuration ────────────────────────────────────────────────────────────
-MRI_DIR = r"C:\TumorOI\dataset\guardrail_dataset\mri_images"
-NON_MRI_DIR = r"C:\TumorOI\dataset\guardrail_dataset\random_images_gray"
-MODELS_DIR = r"C:\TumorOI\models"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MRI_DIR = os.path.join(BASE_DIR, "dataset", "guardrail_dataset", "mri_images")
+NON_MRI_DIR = os.path.join(BASE_DIR, "dataset", "guardrail_dataset", "random_images_gray")
+MODELS_DIR = os.path.join(BASE_DIR, "models")
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 # Hyperparameters

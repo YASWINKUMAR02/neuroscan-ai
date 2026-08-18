@@ -2,8 +2,9 @@ import os
 from PIL import Image
 from tqdm import tqdm
 
-SOURCE_DIR = r"C:\TumorOI\dataset\guardrail_dataset\random_images"
-TARGET_DIR = r"C:\TumorOI\dataset\guardrail_dataset\random_images_gray"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SOURCE_DIR = os.path.join(BASE_DIR, "dataset", "guardrail_dataset", "random_images")
+TARGET_DIR = os.path.join(BASE_DIR, "dataset", "guardrail_dataset", "random_images_gray")
 
 def main():
     if not os.path.exists(SOURCE_DIR):

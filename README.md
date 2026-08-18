@@ -63,7 +63,7 @@ Brain tumors (such as **Gliomas**, **Meningiomas**, and **Pituitary adenomas**) 
 ## 📂 Project Structure
 
 ```directory
-c:/TumorOI/
+neuroscan-ai/
 ├── .streamlit/
 │   └── config.toml               # Streamlit UI theme configuration
 ├── dataset/                      # Brain MRI datasets
@@ -98,8 +98,9 @@ c:/TumorOI/
 
 ### 2. Environment Setup
 ```powershell
-# Clone or open workspace
-cd c:\TumorOI
+# Clone repository & navigate to project directory
+git clone https://github.com/your-org/neuroscan-ai.git
+cd neuroscan-ai
 
 # Create virtual environment
 python -m venv venv

@@ -649,18 +649,19 @@ div[data-testid="stFormSubmitButton"] > button:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+# ── Constants & Dynamic Model Paths ───────────────────────────────────────────
+BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
 CLASSES          = ["glioma", "meningioma", "notumor", "pituitary"]
-MODEL_PATH       = r"C:\TumorOI\models\best_efficientnet_b0.pth"
-METRICS_PATH     = r"C:\TumorOI\models\metrics.json"
-SEG_MODEL_PATH   = r"C:\TumorOI\seg_models\best_unet_effb0.pth"
-SEG_METRICS_PATH = r"C:\TumorOI\seg_models\seg_metrics.json"
+MODEL_PATH       = os.path.join(BASE_DIR, "models", "best_efficientnet_b0.pth")
+METRICS_PATH     = os.path.join(BASE_DIR, "models", "metrics.json")
+SEG_MODEL_PATH   = os.path.join(BASE_DIR, "seg_models", "best_unet_effb0.pth")
+SEG_METRICS_PATH = os.path.join(BASE_DIR, "seg_models", "seg_metrics.json")
 DEVICE           = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SEG_IMG_SIZE     = 256
 
 TUMOR_CLASSES = {"glioma", "meningioma", "pituitary"}
 
-GUARDRAIL_MODEL_PATH = r"C:\TumorOI\models\best_guardrail.pth"
+GUARDRAIL_MODEL_PATH = os.path.join(BASE_DIR, "models", "best_guardrail.pth")
 GUARDRAIL_THRESHOLD  = 0.85
 
 # ── Model Loaders ─────────────────────────────────────────────────────────────

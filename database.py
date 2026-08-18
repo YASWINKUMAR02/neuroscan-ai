@@ -31,8 +31,9 @@ MYSQL_PASSWORD = os.getenv("DB_PASSWORD", "root")
 MYSQL_PORT = int(os.getenv("DB_PORT", 3306))
 MYSQL_DB = os.getenv("DB_NAME", "neuroscan_db")
 
-# SQLite Fallback Path
-SQLITE_DB_PATH = r"C:\TumorOI\neuroscan.db"
+# SQLite Fallback Path (dynamic relative path)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SQLITE_DB_PATH = os.path.join(BASE_DIR, "neuroscan.db")
 
 # Flag to track active DB backend
 USE_MYSQL = True

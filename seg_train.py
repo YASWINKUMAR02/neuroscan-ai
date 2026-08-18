@@ -26,9 +26,10 @@ torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
 # -- Paths --------------------------------------------------------------------
-IMG_DIR   = r"C:\TumorOI\dataset\Segmentation-dataset\images"
-MASK_DIR  = r"C:\TumorOI\dataset\Segmentation-dataset\masks"
-SAVE_DIR  = r"C:\TumorOI\seg_models"
+BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
+IMG_DIR   = os.path.join(BASE_DIR, "dataset", "Segmentation-dataset", "images")
+MASK_DIR  = os.path.join(BASE_DIR, "dataset", "Segmentation-dataset", "masks")
+SAVE_DIR  = os.path.join(BASE_DIR, "seg_models")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 # -- Hyperparameters ----------------------------------------------------------
